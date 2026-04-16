@@ -1,0 +1,11 @@
+[project]
+name = "call-me-maybe"
+version = "1.0.0"
+description = "Introduction to function calling in LLMs"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{"name" = "nsato", "email" = "nsato@student.42tokyo.jp"}]
+dependencies = ["numpy", "pydantic"]
+
+[project.dependencies]
+dev = ["flake8", "mypy"]

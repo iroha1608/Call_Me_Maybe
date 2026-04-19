@@ -1,37 +1,40 @@
 # Mandatory requirements
 # install, run, debug, clean, lint, lint-strict
 
-check-venv:
-	@if [ -z "$$VIRTUAL_ENV" ]; then \
-		echo "Error: Please run this within a virtual environment."; \
-		exit 1; \
-	fi
+PYTHON	:= uv run python
+SRC_DIR	:= src
+RM		:= rm -rf
 
 install: check-venv
-	pip install -r requirements.txt
+	uv sync
 
 run:
-	python3 a_maze_ing.py config.txt
+	$(PYTHON) -m $(SRC_DIR) 
 
 debug:
-	python3 -m pdb a_maze_ing.py config.txt
+	$(PYTHON) -m pdb -m $(SRC_DIR) 
 
 clean:
 	find . -name "*.pyc" -type f -delete -print
 	find . -type d  -name "__pycache__" -delete -print
-	rm -rf .mypy_cache
-	rm -rf dist/
-	rm -rf mazegen.egg-info/
+	$(RM) .mypy_cache
+	$(RM) .pytest_cache
+	$(RM) data/output/*
 
 lint:
-	-flake8 .
-	mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	uv run flake8 $(SRC_DIR)
+	uv run mypy $(SRC_DIR) \
+		--warn-return-any \
+		--warn-unused-ignores \
+		--ignore-missing-imports \
+		--disallow-untyped-defs \
+		--check-untyped-defs
 
 lint-strict:
-	-flake8 .
-	mypy . --strict
+	uv run flake8 $(SRC_DIR)
+	uv run mypy --strict $(SRC_DIR)
 
 build: check-venv
 	python3 -m build
 
-.PHONY: check-venv install run debug clean lint lint-strict build
+.PHONY: install run debug clean lint lint-strict build

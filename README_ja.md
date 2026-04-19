@@ -1,34 +1,76 @@
-*This project has been created as part of the 42 curriculum by nsato.*  
+# Todo
+- [x] 概要
+- [ ] 手順
+- [ ] 追加要件
+	- [ ] アルゴリズムの説明
+	- [ ] 設計上の決定事項
+	- [ ] 性能分析
+	- [ ] 直面した課題
+	- [ ] テスト戦略
+	- [ ] 使用例
+- [ ] リソース
+- [ ] AIの使用について
+- [ ] 日本語版→英語版作成
+- [ ] 目次できてるかの調整
+
+*This project has been created as part of the 42 curriculum by nsato.*
 
 <table>
 	<thead>
     	<tr>
-      		<th style="text-align:center"><a href="README_ja.md">English</a></th>
+      		<th style="text-align:center"><a href="README.md">English</a></th>
       		<th style="text-align:center">日本語</th>
     	</tr>
   	</thead>
 </table>
 
-## 📖*Content*  
+<h1>
+	Call_Me_Maybe
+</h1>
+
+## 📖*Content*
 ---
-1. [💡概要](README_ja.md#概要)  
-2. [✅手順](README_ja.md#手順)  
-3. [⛏追加要件](README_ja.md#追加要件)  
-4. [🌈リソース](README.ja.md#リソース)  
+1. [💡概要](#1.概要)
+2. [✅手順](#2.手順)
+3. [⛏追加要件](#3.追加要件)
+	1. [アルゴリズムの説明](#3-1.アルゴリズムの説明)
+	2. [設計上の決定事項](#3-2.設計上の決定事項)
+	3. [性能分析](#3-3.性能分析)
+	4. [直面した課題](#3-4.直面した課題)
+	5. [テスト戦略](#3-5.テスト戦略)
+	6. [使用例](#3-6.使用例)
+4. [🌈リソース](#4.リソース)
+	1. [AIの使用について](#4-1.AIの使用について)
 
-## 概要  
+## 1.概要
 ---
-This project introduces function calling in Large Language Models by building a system that translates natural language prompts into structured function calls with typed arguments.  
-You'll implement constrained decoding to guarantee valid JSON output, achieving near-perfect reliability with a small 0.5B parameter model, bridging the gap between human language and computer-executable operations.
+このプロジェクトでは、自然言語のプロンプトを型付き引数を持つ構造化された関数呼び出しに変換するシステムを構築することで、大規模言語モデルにおける関数呼び出しの仕組みを紹介します。  
+有効なJSON出力を保証するための制約付きデコードを実装し、わずか0.5Bパラメータのモデルでほぼ完璧な信頼性を実現することで、人間の言語とコンピュータが実行可能な操作との間のギャップを埋めます。  
 
-## 手順  
+## 2.手順
 ---
 
-## 追加要件  
+```
+make run
+```
+
+## 3.追加要件
 ---
-### 1. ファイル構成  
+### 3-1.アルゴリズムの説明
+	制約付きデコードの手法を詳細に記述してください  
+### 3-2.設計上の決定事項
+	実装における重要な選択について説明してください  
+### 3-3.性能分析
+	ソリューションの精度、速度、信頼性について論じてください  
+### 3-4.直面した課題
+	遭遇した困難と、その解決方法を記載してください  
+### 3-5.テスト戦略
+	実装をどのように検証したかを記述してください  
+### 3-6.使用例
+	プログラムの実行例を明確に提示してください  
 
-### 2. 設定ファイルの構造とフォーマット  
+## 4.リソース
+---
 
-## リソース
+### 4-1.AIの使用について
 ---

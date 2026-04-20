@@ -26,7 +26,9 @@
 
 <h1>
 	Call_Me_Maybe
-</h1>
+</h1> <H2>
+ LLMにおける関数呼び出し(Function Calling)の概要
+</H2>
 
 ## 📖*Content*
 ---
@@ -73,6 +75,8 @@ make run
 
 ## 4.リソース
 ---
+- [組み込み例外](https://docs.python.org/ja/3.14/library/exceptions.html)
+- [Pythonのraiseについて](https://zenn.dev/tektek/articles/9b8fd47e2cac4f)
 
 ### 4-1.AIの使用について
 ---

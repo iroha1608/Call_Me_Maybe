@@ -5,7 +5,15 @@ description = "Introduction to function calling in LLMs"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{"name" = "nsato", "email" = "nsato@student.42tokyo.jp"}]
-dependencies = ["numpy", "pydantic"]
-
-[project.dependencies]
-dev = ["flake8", "mypy"]
+# これがないとプログラム実行時にエラー。
+dependencies = [
+	"numpy",
+	"pydantic"
+]
+# 実行ロジックに違いはないが、開発、テスト、静的解析に必要。
+[dependency-groups]
+dev = [
+	"flake8",
+	"mypy",
+	"pytest"
+]

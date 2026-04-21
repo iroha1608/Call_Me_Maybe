@@ -8,14 +8,15 @@ class CLIConfig(BaseModel):
         default="data/input/functions_definition.json",
         description="Path to the function definitions JSON file."
     )
-    input: str = field(
+    input: str = Field(
         default="data/input/function_calling_tests.json",
         description="Path to the input prompts JSON file"
     )
-    output: str = field(
+    output: str = Field(
         default="data/output/function_calling_results.json",
         description="Path to the output results JSON file"
     )
+
 
 def parse_arguments() -> CLIConfig:
     parser = argparse.ArgumentParser(

@@ -5,7 +5,7 @@ from src.tokenizer import Tokenizer
 from src.models import FunctionDefinition
 
 
-class Constractfilter:
+class ConstraintFilter:
 
     def __init__(
         self,

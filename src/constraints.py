@@ -2,7 +2,7 @@ import sys
 import math
 
 from src.tokenizer import Tokenizer
-from src.models import FunctionDefinition
+from src.models import FunctionsDefinition
 
 
 class ConstraintFilter:
@@ -26,4 +26,3 @@ class ConstraintFilter:
             print(f"ConstrainFilter: Error during logit filtering. "
                   f"{e}", file=sys.stderr)
             return logits
-

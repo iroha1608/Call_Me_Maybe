@@ -1,4 +1,4 @@
-from src.cli import CLIConfig, parse_arguments
+from src.cli_arg import CLIConfig, parse_arguments
 from src.llm_client import LLMClient
 from src.tokenizer import Tokenizer
 from src.constraints import ConstrainFilter

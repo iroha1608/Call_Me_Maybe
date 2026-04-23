@@ -18,7 +18,7 @@ class ParameterDefinition(BaseModel):
 
 
 class FunctionDefinition(BaseModel):
-    name: str = Field(..., description: str = "The name of the function.")
+    name: str = Field(..., description="The name of the function.")
     description: str = Field(
         ...,
         description="A brief description of what the function does."

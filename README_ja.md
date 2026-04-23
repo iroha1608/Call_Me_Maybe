@@ -51,9 +51,27 @@
 
 ## 2.手順
 ---
-
+Set up手順  
+- 今回はuvを使用するため、仮想環境の構築から開始。  
+```
+make setup
+```
+- PDFの仕様に基づき、下記コマンドをターミナルで実行しシステムを起動。  
+```
+uv run python -m src [--functions_definition <function_definition_file>] [--input <input_file>] [--output <output_file>]
+```
+- Makefileにより上記コマンドを
 ```
 make run
+```
+で使用可能。  
+- このコマンドは、デフォルトでdata/input/ディレクトリから入力ファイルを読み取り、data/output/ディレクトリに結果を書き出す。  
+最終的な出力は`data/output/function_calling_results.json`という単一のJSONファイル。  
+入力された各自然言語プロンプトに対し、以下のキーを厳密に持つJSONオブジェクトの配列を生成する。
+```
+prompt (string): 元の自然言語リクエスト
+name (string): 呼び出すべき関数名
+parameters (object): スキーマ（型）に完全に準拠した引数データ
 ```
 
 ## 3.追加要件

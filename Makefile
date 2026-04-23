@@ -1,4 +1,4 @@
-UV		:= uv run
+UV		:= uv
 PYTHON	:= python -m
 SRC_DIR	:= src
 RM		:= rm -rf
@@ -6,14 +6,17 @@ RM		:= rm -rf
 # Mandatory requirements
 # install, run, debug, clean, lint, lint-strict
 
-install: check-venv
-	uv sync
+setup:
+	$(UV) venv
+
+install:
+	$(UV) sync
 
 run:
-	$(UV) $(PYTHON) $(SRC_DIR) 
+	$(UV) run $(PYTHON) $(SRC_DIR) 
 
 debug:
-	$(UV) $(PYTHON) pdb -m $(SRC_DIR) 
+	$(UV) run $(PYTHON) pdb -m $(SRC_DIR) 
 
 clean:
 	find . -name "*.pyc" -type f -delete -print
@@ -23,17 +26,21 @@ clean:
 	$(RM) data/output/*
 
 lint:
-	$(UV) flake8 $(SRC_DIR)
-	$(UV) mypy $(SRC_DIR) \
+	$(UV) run flake8 $(SRC_DIR)
+	$(UV) run mypy $(SRC_DIR) \
 		--warn-return-any \
 		--warn-unused-ignores \
 		--ignore-missing-imports \
 		--disallow-untyped-defs \
 		--check-untyped-defs
+	$(UV) run ruff $(SRC_DIR)
 
 lint-strict:
-	$(UV) flake8 $(SRC_DIR)
-	$(UV) mypy --strict $(SRC_DIR)
+	$(UV) run flake8 $(SRC_DIR)
+	$(UV) run mypy --strict $(SRC_DIR)
+
+test:
+	$(UV) run pytest tests
 
 build: check-venv
 	$(PYTHON) build

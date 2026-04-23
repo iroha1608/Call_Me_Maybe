@@ -47,9 +47,9 @@ def parse_arguments() -> CLIConfig:
         args = parser.parse_args()
         # 型検証、安全なデータモデルの生成
         return CLIConfig(
-            function_definition=arg.functions_definiton,
-            input=arg.input,
-            output=arg.output
+            function_definition=args.functions_definiton,
+            input=args.input,
+            output=args.output
         )
 
     except Exception as e:

@@ -24,30 +24,30 @@ def parse_arguments() -> CLIConfig:
     )
 
     parser.add_argument(
-        "--funtions_definition",
+        "--functions_definition",
         type=str,
         default="data/input/functions_definition.json",
-        description="Path to the function definitions JSON file."
+        help="Path to the function definitions JSON file."
     )
 
     parser.add_argument(
         "--input",
         type=str,
         default="data/input/function_calling_tests.json",
-        description="Path to the input prompts JSON file"
+        help="Path to the input prompts JSON file"
     )
     parser.add_argument(
         "--output",
         type=str,
         default="data/output/function_calling_results.json",
-        description="Path to the output results JSON file"
+        help="Path to the output results JSON file"
     )
 
     try:
         args = parser.parse_args()
         # 型検証、安全なデータモデルの生成
         return CLIConfig(
-            function_definition=args.functions_definiton,
+            function_definition=args.functions_definition,
             input=args.input,
             output=args.output
         )

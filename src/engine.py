@@ -40,7 +40,7 @@ class GenerationEngine:
                 current_sequence = input_ids + generated_ids
                 logits = self._llm.get_logits(current_sequence)
 
-                filtered_logits = self._filter.filter_logits(
+                filtered_logits = self._constraint_filter.filter_logits(
                     logits=logits,
                     generated_text=generated_text
                 )
@@ -56,9 +56,9 @@ class GenerationEngine:
                             return parsed_json
                     except json.JSONDecodeError:
                         pass
-                raise EngineError(
-                    "Maximum token reached without generating valid JSON."
-                )
+            raise EngineError(
+                "Maximum token reached without generating valid JSON."
+            )
 
         except Exception as e:
             print(f"EngineError: Generation pipeline failed."

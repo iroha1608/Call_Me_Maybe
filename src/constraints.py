@@ -2,7 +2,7 @@ import sys
 import math
 
 from src.tokenizer import Tokenizer
-from src.models import FunctionsDefinition
+from src.models import FunctionDefinition
 
 
 class ConstraintFilter:
@@ -10,7 +10,7 @@ class ConstraintFilter:
     def __init__(
         self,
         tokenizer: Tokenizer,
-        available_functions: list[FunctionsDefinition]
+        available_functions: list[FunctionDefinition]
     ) -> None:
         self._tokenizer = tokenizer
         self._available_functions = available_functions

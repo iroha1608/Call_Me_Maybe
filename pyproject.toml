@@ -16,5 +16,6 @@ dev = [
 	"flake8",
 	"mypy",
 	"ruff",
+	"ty",
 	"pytest"
 ]

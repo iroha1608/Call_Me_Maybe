@@ -1,6 +1,6 @@
 UV		:= uv
-PYTHON	:= python -m
-SRC_DIR	:= ./src
+PYTHON	:= python3 -m
+SRC_DIR	:= src
 RM		:= rm -rf
 
 # Mandatory requirements
@@ -23,10 +23,10 @@ llm:
 	$(UV) pip install transformers huggingface_hub accelerate
 
 run:
-	$(UV) run $(PYTHON) $(SRC_DIR) 
+	$(UV) run $(PYTHON) $(SRC_DIR)
 
 debug:
-	$(UV) run $(PYTHON) pdb -m $(SRC_DIR) 
+	$(UV) run $(PYTHON) pdb -m $(SRC_DIR)
 
 clean:
 	find . -name "*.pyc" -type f -delete -print
@@ -42,7 +42,7 @@ lint:
 	- $(UV) run flake8 $(SRC_DIR)
 	$(UV) run mypy $(SRC_DIR) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 	$(UV) run ruff $(SRC_DIR)
-
+	$(UV) run ty
 lint-strict:
 	$(UV) run flake8 $(SRC_DIR)
 	$(UV) run mypy --strict $(SRC_DIR)

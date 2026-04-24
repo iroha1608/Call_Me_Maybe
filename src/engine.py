@@ -7,7 +7,7 @@ from src.tokenizer import Tokenizer
 from src.constraints import ConstraintFilter
 
 
-class EngineError:
+class EngineError(Exception):
     pass
 
 
@@ -36,7 +36,7 @@ class GenerationEngine:
             generated_ids: list[int] = []
             generated_text = ""
 
-            for _ in range(self._max_tokens):
+            for _ in range(self._max_new_tokens):
                 current_sequence = input_ids + generated_ids
                 logits = self._llm.get_logits(current_sequence)
 

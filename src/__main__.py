@@ -56,7 +56,8 @@ def main() -> None:
                 name=output_data.get("name", "unknown"),
                 parameters=output_data.get("parameters", {})
             )
-            results.append(result_model.model_demp())
+            # model.dump() -> dict形式での保存
+            results.append(result_model.model_dump())
 
         output_dir = os.path.dirname(config.output)
         if output_dir:

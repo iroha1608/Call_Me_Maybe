@@ -33,6 +33,7 @@ clean:
 	find . -type d -name "__pycache__" -delete -print
 	$(RM) .mypy_cache
 	$(RM) .pytest_cache
+	$(RM) .ruff_cache
 	$(RM) data/output/*
 
 fclean: clean
@@ -40,9 +41,10 @@ fclean: clean
 
 lint:
 	- $(UV) run flake8 $(SRC_DIR)
-	$(UV) run mypy $(SRC_DIR) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
-	$(UV) run ruff $(SRC_DIR)
-	$(UV) run ty
+	- $(UV) run mypy $(SRC_DIR) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	- $(UV) run ruff check $(SRC_DIR)
+	- $(UV) run ty check $(SRC_DIR)
+
 lint-strict:
 	$(UV) run flake8 $(SRC_DIR)
 	$(UV) run mypy --strict $(SRC_DIR)

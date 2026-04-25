@@ -13,6 +13,8 @@ class EngineError:
     tokenを使い果たしたら送出
 
     """
+=======
+class EngineError(Exception):
     pass
 
 
@@ -48,14 +50,18 @@ class GenerationEngine:
             generated_ids: list[int] = []
             current_text = ""
 
-            for _ in range(self._max_tokens):
+            for _ in range(self._max_new_tokens):
                 current_sequence = input_ids + generated_ids
                 logits = self._llm.get_logits(current_sequence)
 
+<<<<<<< HEAD
                 # 状態遷移(FSM) VS 正規表現(Regex)
                 # 無効なトークンを選択されないように処理
                 # 制約フィルタリング
                 filtered_logits = self._filter.filter_logits(
+=======
+                filtered_logits = self._constraint_filter.filter_logits(
+>>>>>>> 5c34a02a697df29716bea9095d29ce255ea80173
                     logits=logits,
                     current_text=current_text
                 )
@@ -74,7 +80,10 @@ class GenerationEngine:
                             return parsed_json
                     except json.JSONDecodeError:
                         pass
+<<<<<<< HEAD
             # _max_tokensを超えたらエラー送出
+=======
+>>>>>>> 5c34a02a697df29716bea9095d29ce255ea80173
             raise EngineError(
                 "Maximum token reached without generating valid JSON."
             )

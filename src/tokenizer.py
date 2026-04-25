@@ -36,7 +36,7 @@ class Tokenizer:
         try:
             for char in text:
                 if char in self._token_to_id:
-                    token_ids.append(self._token_to_ids[char])
+                    token_ids.append(self._token_to_id[char])
                 else:
                     pass
             return token_ids

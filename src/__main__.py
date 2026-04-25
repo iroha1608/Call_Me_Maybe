@@ -3,7 +3,7 @@ import os
 import json
 from typing import Any
 
-from src.cli import parse_arguments
+from src.cli_arg import parse_arguments
 from src.llm_client import LLMClient
 from src.tokenizer import Tokenizer
 from src.constraints import ConstraintFilter
@@ -23,7 +23,7 @@ def main() -> None:
                     "Input prompts file must contain a JSON array"
                 )
         # 関数データの読み取り
-        with open(config.function_definiton, "r", encoding="utf-8") as f_func:
+        with open(config.function_definition, "r", encoding="utf-8") as f_func:
             functions_data = json.load(f_func)
             if not isinstance(functions_data, list):
                 raise ValueError(
@@ -32,7 +32,7 @@ def main() -> None:
 
         # 依存オブジェクトの構築
         llm_client = LLMClient()
-        tokenizer = Tokenizer()
+        tokenizer = Tokenizer(llm_client)
         constraint_filter = ConstraintFilter(
             tokenizer=tokenizer,
             available_functions=functions_data
@@ -67,6 +67,7 @@ def main() -> None:
     except Exception as e:
         print(f"MainError: Pipeline execution failed."
               f"{e}", file=sys.stderr)
+        print(e.__doc__)
         exit(1)
 
 

@@ -52,7 +52,7 @@ lint-strict:
 test:
 	$(UV) run pytest tests
 
-build: check-venv
-	$(PYTHON) build
+build:
+	$(UV) run $(PYTHON) build
 
 .PHONY: install run debug clean lint lint-strict build uv setup llm fclean

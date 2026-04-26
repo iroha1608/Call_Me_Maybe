@@ -8,23 +8,24 @@ from src.llm_client import LLMClient
 from src.tokenizer import Tokenizer
 from src.constraints import ConstraintFilter
 from src.engine import GenerationEngine
-from src.models import FunctionCallResult
+from src.models import FunctionCallResult, FunctionDefinition
 
 
 def main() -> None:
     try:
-        # configの読み込み
+        # CLIから指定された(またはデフォルトの)各データの読み込み->config
         config = parse_arguments()
-        # プロンプトの読み込み
+
+        # プロンプトの読み込み->prompts_data
         with open(config.input, "r", encoding="utf-8") as f_in:
             prompts_data: list[dict[str, str]] = json.load(f_in)
             if not isinstance(prompts_data, list):
                 raise ValueError(
                     "Input prompts file must contain a JSON array"
                 )
-        # 関数データの読み取り
+        # 関数データの読み込み->functions_data
         with open(config.function_definition, "r", encoding="utf-8") as f_func:
-            functions_data = json.load(f_func)
+            functions_data: list[FunctionDefinition] = json.load(f_func)
             if not isinstance(functions_data, list):
                 raise ValueError(
                     "Function definitons file must contain a JSON array"
@@ -44,8 +45,11 @@ def main() -> None:
         )
 
         results: list[dict[str, Any]] = []
-        for item in prompts_data:
-            prompt_text = item.get("prompt")
+
+        # prompts_dataからpromptを一つづつ処理
+        for prompt in prompts_data:
+            # 取り出したpromptにkey="prompt"がなければ飛ばす
+            prompt_text = prompt.get("prompt")
             if not prompt_text:
                 continue
 
@@ -77,4 +81,7 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt as e:
+        print(f"KeyboardINterruptError: {e}", file=sys.stderr)
         sys.exit(1)

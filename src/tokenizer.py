@@ -13,9 +13,9 @@ class Tokenizer:
         self._vocab_path = llm_client.get_path_to_vocabfile()
         self._token_to_id: dict[str, int] = {}
         self._id_to_token: dict[int, str] = {}
-        self._load_vocablary()
+        self._load_vocabulary()
 
-    def _load_vocablary(self) -> None:
+    def _load_vocabulary(self) -> None:
         try:
             with open(self._vocab_path, "r",  encoding="utf-8") as f:
                 vocab_data = json.load(f)
@@ -31,10 +31,10 @@ class Tokenizer:
                   f"{e}", file=sys.stderr)
             raise TokenizerError("Vocabulary loading failed.") from e
 
-    def encode(self, text: str) -> list[int]:
-        token_ids: list = []
+    def encode(self, prompt: str) -> list[int]:
+        token_ids: list[int] = []
         try:
-            for char in text:
+            for char in prompt:
                 if char in self._token_to_id:
                     token_ids.append(self._token_to_id[char])
                 else:

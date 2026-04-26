@@ -3,7 +3,7 @@ from src.llm_client import LLMClient
 from src.tokenizer import Tokenizer
 from src.constraints import ConstraintFilter
 from src.engine import GenerationEngine
-from src.models import PromptImput, FunctionDefinition, FunctionCallResult
+from src.models import PromptInput, FunctionDefinition, FunctionCallResult
 
 
 __all__ = [
@@ -11,7 +11,7 @@ __all__ = [
     "parse_arguments",
     "GenerationEngine",
     "LLMClient",
-    "PromptImput",
+    "PromptInput",
     "FunctionDefinition",
     "FunctionCallResult",
     "Tokenizer",

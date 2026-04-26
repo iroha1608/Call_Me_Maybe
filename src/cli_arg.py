@@ -44,6 +44,7 @@ def parse_arguments() -> CLIConfig:
     )
 
     try:
+        # 解析
         args = parser.parse_args()
         # 型検証、安全なデータモデルの生成
         return CLIConfig(

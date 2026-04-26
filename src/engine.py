@@ -45,12 +45,12 @@ class GenerationEngine:
         """
         try:
             input_ids = self._tokenizer.encode(prompt)
-            generated_ids: list[int] = []
+            token_ids: list[int] = []
             current_text = ""
 
             for _ in range(self._max_new_tokens):
-                current_sequence = input_ids + generated_ids
-                logits = self._llm.get_logits(current_sequence)
+                current_sequence = input_ids + token_ids
+                logits: list[float] = self._llm.get_logits(current_sequence)
 
                 # 状態遷移(FSM) VS 正規表現(Regex)
                 # 無効なトークンを選択されないように処理
@@ -60,10 +60,10 @@ class GenerationEngine:
                     current_text=current_text
                 )
                 next_token_id = self._argmax(filtered_logits)
-                generated_ids.append(next_token_id)
+                token_ids.append(next_token_id)
 
                 # decode
-                current_text = self._tokenizer.decode(generated_ids)
+                current_text = self._tokenizer.decode(token_ids)
 
                 # _max_tokensの上限になる前に有効なJsonオブジェクトが
                 # 形成された時点でループ脱出 -> 計算資源を最適化

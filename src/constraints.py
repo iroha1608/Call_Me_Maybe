@@ -39,7 +39,7 @@ class ConstraintFilter:
         current_text: str,
     ) -> tuple[str, list[str]]:
         """
-        生成済みテキスト長(N)に対して一階のループ処理で状態を判定。
+        生成済みテキスト長(N)に対して1回のループ処理で状態を判定。
         O(N): 線形時間計算量
         """
 
@@ -99,17 +99,20 @@ class ConstraintFilter:
 
     def _get_allowed_characters(self, state: str) -> set[str]:
         """ FSMの遷移状態を許容される次の文字にマッピングする。"""
+        # space, 改行, tab, 復帰文字
+        white_space = {" ", "\n", "\t", "\r"}
+
         if state == FSMState.EXPECT_BEGIN_OBJECT:
-            return {"{"}
+            return {"{"} | white_space
         elif state == FSMState.EXPECT_KEY:
-            return {'"', "}"}
+            return {'"', "}"} | white_space
         elif state == FSMState.EXPECT_COLON:
-            return {':'}
+            return {':'} | white_space
         elif state == FSMState.EXPECT_VALUE:
             return {'"', "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-                    "-", "+", "t", "f", "n", "{"}
+                    "-", "+", "t", "f", "n", "{", "["} | white_space
         elif state == FSMState.EXPECT_COMMA_OR_END_OBJECT:
-            return {"{", "}"}
+            return {",", "}", "]"} | white_space
         elif state == FSMState.DONE:
             return {"\n", " "}
         return set()
@@ -118,10 +121,13 @@ class ConstraintFilter:
         self, logits: list[float], current_text: str
     ) -> list[float]:
         try:
-            # 状態遷移(FSM) VS 正規表現(Regex)
+            # 状態遷移(FSM)
             # 1. current_textを解析し、現在のJsonノードを特定する
             # (例:key, value, bracketを待つ)
             state, stack = self._determine_current_state(current_text)
+
+            # 文字列内では、Escapeされていない構造的な改行を除いて
+            # ほぼなんでも許可する
             if state in (
                     FSMState.EXPECT_VALUE, FSMState.DONE) and (
                     current_text.count('"') % 2 != 0):
@@ -132,9 +138,23 @@ class ConstraintFilter:
             # 元のデータが破壊されないように浅いコピー
             filtered_logits = list(logits)
 
-            for token_id, token_str in self._vocab_items:
-                clean_str = token_str.replace("Ġ", "").strip()
+            # クリーンな文字列を取得(Qwen固有のtoken形式に対応)
+            def _clean_token(t_str: str) -> str:
+                # 標準的なBPEのスペースを処理
+                t_str = t_str.replace("Ġ", " ").replace(" ", " ")
+                # 構造文字のみを検索する場合はスペース削除
+                # 空白文字が厳密に許可されている場合は残す
+                return t_str.lstrip() if t_str.lstrip() else " "
 
+            for token_id, token_str in self._vocab_items:
+                clean_str = _clean_token(token_str)
+
+                # 特別なtoken(<|endoftext|>)等は<で始まる場合が多い
+                # DONEならEOS tokenが生成を終了
+                if clean_str.startswith("<") and state == FSMState.DONE:
+                    continue
+
+                # 完全に空のtokenは安全か中立
                 if not clean_str:
                     continue
 

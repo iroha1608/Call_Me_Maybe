@@ -2,7 +2,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class PromptImput(BaseModel):
+class PromptInput(BaseModel):
     prompt: str = Field(
         ...,
         description="The natural language prompt provided by the user."
@@ -18,7 +18,10 @@ class ParameterDefinition(BaseModel):
 
 
 class FunctionDefinition(BaseModel):
-    name: str = Field(..., description="The name of the function.")
+    name: str = Field(
+        ...,
+        description="The name of the function."
+    )
     description: str = Field(
         ...,
         description="A brief description of what the function does."

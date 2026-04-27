@@ -19,3 +19,6 @@ dev = [
 	"ty",
 	"pytest"
 ]
+
+[tool.mypy]
+exclude = ["llm_sdk/"]

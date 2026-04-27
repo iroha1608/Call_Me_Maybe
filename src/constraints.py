@@ -19,9 +19,10 @@ class FSMState(str, Enum):
 
 class ConstraintFilter:
     """
-    プッシュダウンオートマトン(PDA)を使用し、制約付きデコーディングを行う。
+    プッシュダウンオートマトン(PDA)、前方一致を使用し、
+    制約付きデコーディングを行う。
     言語モデルが出力した確率分布(Logits)を操作、
-    Json構文に違反するトークンをフィルタリングするクラス。
+    Json構文、スキーマに違反するtokenをフィルタリングするクラス。
     """
 
     def __init__(
@@ -33,79 +34,102 @@ class ConstraintFilter:
         self._available_functions = available_functions
         # ループ中、辞書展開のオーバーヘッド回避で辞書内の項目をキャッシュ
         self._vocab_items = list(tokenizer._id_to_token.items())
+        self._allowed_root_keys = ["name", "parameters"]
 
     def _determine_current_state(
         self,
         current_text: str,
-    ) -> tuple[str, list[str]]:
+    ) -> tuple[FSMState, list[str], str, bool, bool]:
         """
+        文字列を線形走査し、現在の文脈を決定論的に抽出する。
         生成済みテキスト長(N)に対して1回のループ処理で状態を判定。
         O(N): 線形時間計算量
-        """
 
-        text = current_text
-        if not text:
-            return FSMState.EXPECT_BEGIN_OBJECT, []
+        Returns:
+            state: 次に期待される構文状態
+            stack: 括弧のスタック(ネストの深さ測定用)
+            current_string: 現在入力中の文字列の中身
+            in_string: 文字列内部にいるかのフラグ
+            is_value_context: ":"の後 -> True、",", "{}"の後 -> False
+        """
+        if not current_text:
+            return FSMState.EXPECT_BEGIN_OBJECT, [], "", False, False
 
         stack: list[str] = []
         in_string = False
         escape = False
         last_structural_char = ""
+        is_value_context = False
+        current_string = ""
 
-        for char in text:
+        # 文字列から1文字ずつループ
+        for char in current_text:
+            # もし文字列内なら
             if in_string:
                 if escape:
                     escape = False
+                    current_string += char
                 elif char == "\\":
                     escape = True
+                    current_string += char
                 elif char == '"':
                     in_string = False
+                    last_structural_char = '"'
+                else:
+                    current_string += char
             else:
                 if char == '"':
                     in_string = True
+                    last_structural_char = ""
                 elif char == "{":
                     stack.append("{")
                     last_structural_char = char
+                    is_value_context = False
                 elif char == "}":
                     if stack and stack[-1] == "{":
                         stack.pop()
                     last_structural_char = char
-                elif char in [":", ","]:
+                    is_value_context = False
+                elif char in [","]:
                     last_structural_char = char
-        if in_string:
-            return FSMState.EXPECT_VALUE, stack
+                    is_value_context = False
+                elif char in [":"]:
+                    last_structural_char = char
+                    is_value_context = True
 
-        if not stack:
+        state = FSMState.EXPECT_COMMA_OR_END_OBJECT
+        if not stack and not in_string:
             if last_structural_char == "}":
-                return FSMState.DONE, stack
-            return FSMState.EXPECT_BEGIN_OBJECT, stack
+                state = FSMState.DONE
+            else:
+                state = FSMState.EXPECT_BEGIN_OBJECT
+        elif in_string:
+            if is_value_context:
+                state = FSMState.EXPECT_VALUE
+            else:
+                state = FSMState.EXPECT_KEY
+        else:
+            if last_structural_char in ("{", ","):
+                state = FSMState.EXPECT_KEY
+            elif last_structural_char == ":":
+                state = FSMState.EXPECT_VALUE
+            elif last_structural_char == '"':
+                if is_value_context:
+                    state = FSMState.EXPECT_COMMA_OR_END_OBJECT
+                else:
+                    state = FSMState.EXPECT_COLON
 
-        if last_structural_char == "{":
-            return FSMState.EXPECT_KEY, stack
-        elif last_structural_char == ",":
-            return FSMState.EXPECT_KEY, stack
-        elif last_structural_char == ":":
-            return FSMState.EXPECT_VALUE, stack
-        # キーの終わりか文字列の終わりの可能性がある。
-        # 正確なチェックはkey, valueのコンテキストを追跡する必要があるが、
-        # 代替オブジェクト内の閉じ引用符の後はコロンかカンマ
-        elif last_structural_char == '"':
-            # 最後がコロンなら、この引用符は終わりになる
-            if text.rfind(":") > text.rfind(","):
-                return FSMState.EXPECT_COMMA_OR_END_OBJECT, stack
-            return FSMState.EXPECT_COLON, stack
-        # 数字, boolに対するデフォルトの返り値
-        return FSMState.EXPECT_COMMA_OR_END_OBJECT, stack
+        return state, stack, current_string, in_string, is_value_context
 
     def _get_allowed_characters(self, state: str) -> set[str]:
-        """ FSMの遷移状態を許容される次の文字にマッピングする。"""
+        """基本的なJson構文に基づいて許可する文字セットを取得"""
         # space, 改行, tab, 復帰文字
         white_space = {" ", "\n", "\t", "\r"}
 
         if state == FSMState.EXPECT_BEGIN_OBJECT:
             return {"{"} | white_space
         elif state == FSMState.EXPECT_KEY:
-            return {'"', "}"} | white_space
+            return {'"'} | white_space
         elif state == FSMState.EXPECT_COLON:
             return {':'} | white_space
         elif state == FSMState.EXPECT_VALUE:
@@ -124,46 +148,105 @@ class ConstraintFilter:
             # 状態遷移(FSM)
             # 1. current_textを解析し、現在のJsonノードを特定する
             # (例:key, value, bracketを待つ)
-            state, stack = self._determine_current_state(current_text)
+            state, stack, current_string, in_string, is_value_context = (
+                self._determine_current_state(current_text)
+            )
 
-            # 文字列内では、Escapeされていない構造的な改行を除いて
-            # ほぼなんでも許可する
-            if state in (
-                    FSMState.EXPECT_VALUE, FSMState.DONE) and (
-                    current_text.count('"') % 2 != 0):
+            # Valueの文字列内では自由に推論を許可する
+            if in_string and is_value_context:
                 return logits
 
-            # 現在の状態に合わせて文字を許容
-            allowed_chars = self._get_allowed_characters(state)
             # 元のデータが破壊されないように浅いコピー
             filtered_logits = list(logits)
+            # ホワイトリスト方式
+            # 全てのtokenを-infで初期化、許可されたものだけ元の確率で上書き
+            # filtered_logits = [-math.inf] * len(logits)
+            # 現在の状態に合わせて許容する文字を取得
+            allowed_chars = self._get_allowed_characters(state)
+
+            # スタックの深さが1の場合のみルートキーのスキーマ強制を適用
+            depth = len(stack)
+            is_root_level = (depth == 1)
 
             # クリーンな文字列を取得(Qwen固有のtoken形式に対応)
             def _clean_token(t_str: str) -> str:
                 # 標準的なBPEのスペースを処理
-                t_str = t_str.replace("Ġ", " ").replace(" ", " ")
-                # 構造文字のみを検索する場合はスペース削除
-                # 空白文字が厳密に許可されている場合は残す
-                return t_str.lstrip() if t_str.lstrip() else " "
+                return t_str.replace("Ġ", " ")
 
             for token_id, token_str in self._vocab_items:
                 clean_str = _clean_token(token_str)
+
+                if not clean_str:
+                    # 空のtokenは無限ループの原因のためマスキング
+                    filtered_logits[token_id] = -math.inf
+                    continue
 
                 # 特別なtoken(<|endoftext|>)等は<で始まる場合が多い
                 # DONEならEOS tokenが生成を終了
                 if clean_str.startswith("<") and state == FSMState.DONE:
                     continue
+                # ホワイトリスト方式
+                # if clean_str.startswith("<"):
+                    # if  state == FSMState.DONE:
+                        # filtered_logits[token_id] = logits[token_id]
+                    # continue
 
-                # 完全に空のtokenは安全か中立
-                if not clean_str:
+                # 意味論の強制 接頭辞によるフィルター
+                if is_root_level and not is_value_context:
+
+                    # キー文字列の内部の時
+                    if in_string:
+                        new_str = current_string + clean_str
+                        is_valid_schema = False
+
+                        for key in self._allowed_root_keys:
+                            # keyが"name"等の前方一致か"で閉じるか
+                            if (key.startswith(new_str)
+                                    or new_str.startswith(key + '"')):
+                                is_valid_schema = True
+                                break
+
+                        if not is_valid_schema:
+                            filtered_logits[token_id] = -math.inf
+
+                        # 接頭辞の評価後は構文チェックスキップ
+                        continue
+
+                    # キーの開始地点、"を生成するタイミングの時
+                    elif state == FSMState.EXPECT_KEY:
+                        stripped_str = clean_str.strip()
+                        if stripped_str.startswith('"'):
+                            content = stripped_str[1:]
+                            if content:
+                                is_valid_schema = False
+                                for key in self._allowed_root_keys:
+                                    if (key.startswith(content)
+                                            or content.startswith(key + '"')):
+                                        is_valid_schema = True
+                                        break
+                                if not is_valid_schema:
+                                    filtered_logits[token_id] = -math.inf
+                                    continue
+                                # ホワイトリスト方式
+                                # if is_valid_schema:
+                                #     filtered_logits[token_id] = (
+                                #         logits[token_id]
+                                #     )
+                                # continue
+
+                # ルート以外の文字列(ネストされたキー)に対する自由生成を許可
+                if in_string:
+                    # ホワイトリスト方式
+                    # filtered_logits[token_id] = logits[token_id]
                     continue
 
+                # Syntaxの強制
                 first_char = clean_str[0]
                 if first_char not in allowed_chars:
                     filtered_logits[token_id] = -math.inf
-
-            # 3. invalid_token_ids内の各token_idについて:
-            # filtered_logits[token_id] = -math.inf
+                # ホワイトリスト方式
+                # if first_char in allowed_chars:
+                    # filtered_logits[token_id] = logits[token_id]
 
             return filtered_logits
 

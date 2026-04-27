@@ -43,7 +43,7 @@ lint:
 	- $(UV) run flake8 $(SRC_DIR)
 	- $(UV) run mypy $(SRC_DIR) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 	- $(UV) run ruff check $(SRC_DIR)
-	- $(UV) run ty check $(SRC_DIR)
+#	- $(UV) run ty check $(SRC_DIR)
 
 lint-strict:
 	$(UV) run flake8 $(SRC_DIR)

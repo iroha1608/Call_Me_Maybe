@@ -45,6 +45,7 @@ class GenerationEngine:
         """
         try:
             input_ids = self._tokenizer.encode(prompt)
+            print(f"DEBUG: imput_ids='{input_ids}'", file=sys.stderr)
             token_ids: list[int] = []
             current_text = ""
 
@@ -60,19 +61,24 @@ class GenerationEngine:
                     current_text=current_text
                 )
                 next_token_id = self._argmax(filtered_logits)
+                print(f"DEBUG: next_token_id='{next_token_id}'",
+                      file=sys.stderr)
                 token_ids.append(next_token_id)
+                print(f"DEBUG: token_ids='{token_ids}'", file=sys.stderr)
 
                 # decode
                 current_text = self._tokenizer.decode(token_ids)
-
+                print(f"DEBUG: current_text='{current_text}'", file=sys.stderr)
                 # _max_tokensの上限になる前に有効なJsonオブジェクトが
                 # 形成された時点でループ脱出 -> 計算資源を最適化
-                if current_text.endswith("}"):
+                if current_text.strip().endswith("}"):
                     try:
-                        parsed_json = json.loads(current_text)
+                        print("DEBUG: endに入りました")
+                        parsed_json = json.loads(current_text.strip())
                         if isinstance(parsed_json, dict):
                             return parsed_json
                     except json.JSONDecodeError:
+                        print("DEBUG: JSONErrorに入りました")
                         pass
             # _max_tokensを超えたらエラー送出
             raise EngineError(

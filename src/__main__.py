@@ -28,30 +28,34 @@ def _build_prompt(
 ) -> str:
     schema_str = json.dumps(function_schema, indent=2)
     return (
-        "You are a strict system that converts "
-        "user requests into function calls.\n"
+        "<|im_start|>system\n"
+        "You are a strict JSON API. "
+        "Convert the user's natural language request "
+        "into a Json function call.\n"
+        "Do NOT output function definitions, schemas, or types."
+        "You MUST outputsctual values (numbers, strings) "
+        "based on the user's request.\n"
         "Available functions:\n"
-        f"{schema_str}\n\n"
-        "Example 1:\n"
-        "User: What is the weather like in Tokyo?\n"
-        'Assistant: {"name": "get_weather", '
-        '"parameters": {"location": "Tokyo"}}\n\n'
-        "Example 2:\n"
-        f"User: {prompt_text}\n"
-        "Assistant: "
+        f"{schema_str}\n"
+        "<|im_end|>\n"
+        "<|im_start|>user\n"
+        "What is the sum of 12 and 8?\n"
+        "<|im_end|>\n"
+        "<|im_start|>assistant\n"
+        '{\n'
+        '    "name": "fn_add_numbers",\n'
+        '    "parameters": {\n'
+        '        "a": 12.0,\n'
+        '        "b": 8.0\n'
+        '        }\n'
+        '    }\n'
+        '}'
+        "<|im_end|>\n"
+        "<|im_start|>user\n"
+        f"{prompt_text}\n"
+        "<|im_end|>\n"
+        "<|im_start|>assistant\n"
     )
-    # return (
-        # "<|im_start|>system\n"
-        # "You are a strict system.Convert the user`s request into a Json function call.\n"
-        # "You must strictly select a function 'name' from 'Available functions' below.\n"
-        # "Available functions:\n"
-        # f"{schema_str}\n"
-        # "<|im_end|>\n"
-        # "<|im_start|>user\n"
-        # f"{prompt_text}\n"
-        # "<|im_end|>\n"
-        # "<|im_start|>assistant\n"
-    # )
 
 
 def _save_json_file(file_path: str, results: Any) -> None:

@@ -27,35 +27,88 @@ def _build_prompt(
     prompt_text: str, function_schema: list[FunctionDefinition]
 ) -> str:
     schema_str = json.dumps(function_schema, indent=2)
+    # New prompt
+    # return (
+        # "<|im_start|>system\n"
+        # "You are a strict JSON API. "
+        # "Convert the user's natural language request "
+        # "into a Json function call.\n"
+        # "Do NOT output parameter type orschemas. "
+        # "You MUST extract actual values (numbers, strings) "
+        # "from the user's request.\n"
+        # "Available functions:\n"
+        # f"{schema_str}\n"
+        # "<|im_end|>\n"
+        # "<|im_start|>user\n"
+        # "What is the sum of 12 and 8?\n"
+        # "<|im_end|>\n"
+        # "<|im_start|>assistant\n"
+        # '{"name": "fn_add_numbers",'
+        # '"parameters": {"a": 12.0, "b": 8.0}}\n'
+        # "<|im_end|>\n"
+        # "<|im_start|>user\n"
+        # "Reverse the string 'hello'\n"
+        # "<|im_end|>\n"
+        # "<|im_start|>assistant\n"
+        # '{"name": "fn_reverse_string",'
+        # '"parameters": {"s": "hello"}}\n'
+        # "<|im_end|>\n"
+        # "<|im_start|>user\n"
+        # f"{prompt_text}\n"
+        # "<|im_end|>\n"
+        # "<|im_start|>assistant\n"
+    # )
+
+    # Am prompt
     return (
-        "<|im_start|>system\n"
-        "You are a strict JSON API. "
-        "Convert the user's natural language request "
-        "into a Json function call.\n"
-        "Do NOT output function definitions, schemas, or types."
-        "You MUST outputsctual values (numbers, strings) "
-        "based on the user's request.\n"
-        "Available functions:\n"
-        f"{schema_str}\n"
-        "<|im_end|>\n"
-        "<|im_start|>user\n"
-        "What is the sum of 12 and 8?\n"
-        "<|im_end|>\n"
-        "<|im_start|>assistant\n"
-        '{\n'
-        '    "name": "fn_add_numbers",\n'
-        '    "parameters": {\n'
-        '        "a": 12.0,\n'
-        '        "b": 8.0\n'
-        '        }\n'
-        '    }\n'
-        '}'
-        "<|im_end|>\n"
-        "<|im_start|>user\n"
-        f"{prompt_text}\n"
-        "<|im_end|>\n"
-        "<|im_start|>assistant\n"
+        "You are a strict AI assistant designed for "
+        "function calling.\n"
+        "Your task is to analyze the user's prompt "
+        "and generate a JSON "
+        "object to call the correnct function.\n\n"
+        "[Available Functions]\n"
+        f"{schema_str}\n\n"
+        "[Rules]\n"
+        "1. You MUST choose one of the available functions.\n"
+        "2. You MUST extract the required parameters based on "
+        "the function's definiton.\n"
+        "3. You MUST responsed ONLY with a valid JSON object."
+        "```json, no greetings, no explanations.\n\n"
+        "[Output Format]\n"
+        '{"name": "function_name"'
+        '"parameters": "key": "value"}}\n\n'
+        "[User Prompt]\n"
+        f"{prompt_text}"
     )
+    # My prompt
+    # return (
+        # "<|im_start|>system\n"
+        # "You are a strict JSON API. "
+        # "Convert the user's natural language request "
+        # "into a Json function call.\n"
+        # "Do NOT output function definitions, schemas, or types."
+        # "You MUST outputsctual values (numbers, strings) "
+        # "based on the user's request.\n"
+        # "Available functions:\n"
+        # f"{schema_str}\n"
+        # "<|im_end|>\n"
+        # "<|im_start|>user\n"
+        # "What is the sum of 12 and 8?\n"
+        # "<|im_end|>\n"
+        # "<|im_start|>assistant\n"
+        # '{\n'
+        # '    "name": "fn_add_numbers",\n'
+        # '    "parameters": {\n'
+        # '        "a": 12.0,\n'
+        # '        "b": 8.0\n'
+    # '        }\n'
+        # '}'
+        # "<|im_end|>\n"
+        # "<|im_start|>user\n"
+        # f"{prompt_text}\n"
+        # "<|im_end|>\n"
+        # "<|im_start|>assistant\n"
+    # )
 
 
 def _save_json_file(file_path: str, results: Any) -> None:
@@ -114,7 +167,7 @@ def main() -> None:
                 prompt_text = prompt["prompt"]
             except KeyError:
                 continue
-            print(f"3. DEBUG: prompt='{prompt_text}'")
+            print(f"3. DEBUG: Next prompt='{prompt_text}'")
             # 取り出したpromptにkey="prompt"がなければ飛ばす
             if not prompt_text:
                 print(
@@ -140,6 +193,7 @@ def main() -> None:
                 )
                 # model.dump() -> dict形式での保存
                 results.append(result_model.model_dump())
+                print(f"4. DEBUG: Prev prompt='{prompt_text}'")
             except Exception as e:
                 print(f"Error generating response for prompt"
                       f"'{prompt_text}': {e}", file=sys.stderr)

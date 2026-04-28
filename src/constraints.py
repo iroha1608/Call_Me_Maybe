@@ -141,7 +141,7 @@ class ConstraintFilter:
             in_string, is_value_context, last_key, seen_root_keys
         )
 
-    def _get_allowed_characters(self, state: str) -> set[str]:
+    def _get_allowed_characters(self, state: str, depth: int) -> set[str]:
         """基本的なJson構文に基づいて許可する文字セットを取得"""
         if state == FSMState.EXPECT_BEGIN_OBJECT:
             return {"{"}
@@ -150,8 +150,11 @@ class ConstraintFilter:
         elif state == FSMState.EXPECT_COLON:
             return {':'}
         elif state == FSMState.EXPECT_VALUE:
+            if depth >= 2:
+                return {'"', "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+                        ".", "-", "+", "e", "E", "t", "f", "n"}
             return {'"', "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-                    "-", "+", "t", "f", "n", "{", "["}
+                    ".", "-", "+", "e", "E", "t", "f", "n", "{", "["}
         elif state == FSMState.EXPECT_COMMA_OR_END_OBJECT:
             return {",", "}", "]"}
         elif state == FSMState.DONE:
@@ -161,9 +164,12 @@ class ConstraintFilter:
     def filter_logits(
         self, logits: list[float], current_text: str
     ) -> list[float]:
+        """
+        状態遷移(FSM)アルゴリズム
+        プッシュダウンオートマトン(PDA)
+        """
         # print(f"DEBUG: fn_names='{self._valid_fn_names}'")
         try:
-            # 状態遷移(FSM)
             # 1. current_textを解析し、現在のJsonノードを特定する
             # (例:key, value, bracketを待つ)
             (state, stack, current_string,
@@ -171,27 +177,21 @@ class ConstraintFilter:
                 self._determine_current_state(current_text)
             )
 
-            # Valueの文字列内では自由に推論を許可する
-            # if in_string and is_value_context:
-            #     return logits
-
-            # 元のデータが破壊されないように浅いコピー
-            filtered_logits = list(logits)
-            # ホワイトリスト方式
-            # 全てのtokenを-infで初期化、許可されたものだけ元の確率で上書き
-            # filtered_logits = [-math.inf] * len(logits)
-            # 現在の状態に合わせて許容する文字を取得
-            allowed_chars = self._get_allowed_characters(state)
-
             # スタックの深さが1の場合のみルートキーのスキーマ強制を適用
             depth = len(stack)
             is_root_level = (depth == 1)
+
+            # 元のデータが破壊されないように浅いコピー
+            filtered_logits = list(logits)
+            # 現在の状態に合わせて許容する文字を取得
+            allowed_chars = self._get_allowed_characters(state, depth)
 
             # 同じ必須キーのループ防止
             # 全てのキーを出力したら","を禁止する。
             if is_root_level and state == FSMState.EXPECT_COMMA_OR_END_OBJECT:
                 if len(seen_root_keys) >= len(self._allowed_root_keys):
                     allowed_chars = {"}", " ", "\n", "\t", "\r"}
+
             # 使用したキーはリストから削除
             available_root_keys = [
                 key
@@ -210,6 +210,7 @@ class ConstraintFilter:
             def _clean_token(t_str: str) -> str:
                 return t_str.replace("Ġ", " ")
 
+            # tokenをループで確認
             for token_id, token_str in self._vocab_items:
                 clean_str = _clean_token(token_str)
 
@@ -224,35 +225,42 @@ class ConstraintFilter:
                     if state != FSMState.DONE:
                         filtered_logits[token_id] = -math.inf
                     continue
-                # ホワイトリスト方式
-                # if clean_str.startswith("<"):
-                    # if  state == FSMState.DONE:
-                    # filtered_logits[token_id] = logits[token_id]
-                    # continue
 
+                # tokenが空白の時、許可リストになければマスキング
                 stripped = clean_str.lstrip()
                 if not stripped:
                     if " " not in allowed_chars:
                         filtered_logits[token_id] = -math.inf
                     continue
 
-                # 意味論の強制 接頭辞によるフィルター
+                # root keyを消費した後の複数文字tokenを禁止
+                if ((is_root_level)
+                        and (state == FSMState.EXPECT_COMMA_OR_END_OBJECT)):
+                    if len(seen_root_keys) >= len(self._allowed_root_keys):
+                        if "," in clean_str or '"' in clean_str:
+                            filtered_logits[token_id] = -math.inf
+                            continue
+
+                # 1. key内部の時、接頭辞によるフィルター
                 if is_root_level and not is_value_context:
 
-                    # キー文字列の内部の時
+                    # 1-2. 文字列内の時
                     if in_string:
                         new_str = current_string + clean_str
+                        # 許可した接頭辞かチェック
                         is_valid_schema = any(
                             (k.startswith(new_str))
                             or (new_str.startswith(k + '"'))
                             for k in available_root_keys
                         )
+                        # 違うものはマスキング
                         if not is_valid_schema:
                             filtered_logits[token_id] = -math.inf
-                        # 接頭辞の評価後は構文チェックスキップ
+
+                        # 評価後は構文チェックスキップ
                         continue
 
-                    # キーの開始地点、"を生成するタイミングの時
+                    # 1-1. keyの開始地点、'"'を生成する時
                     elif state == FSMState.EXPECT_KEY:
                         if stripped.startswith('"'):
                             content = stripped[1:]
@@ -266,15 +274,11 @@ class ConstraintFilter:
                                 if not is_valid_schema:
                                     filtered_logits[token_id] = -math.inf
                                 continue
-                                # ホワイトリスト方式
-                                # if is_valid_schema:
-                                #     filtered_logits[token_id] = (
-                                #         logits[token_id]
-                                #     )
-                                # continue
 
+                # 2. value内部かつ前のkeyが"name"の時、関数を期待
                 if is_root_level and is_value_context and last_key == "name":
                     # print(f"DEBUG4: last_key=nameだよ")
+                    # 1-2. 文字列内の時
                     if in_string:
                         new_str = current_string + clean_str
                         is_valid_schema = any(
@@ -286,6 +290,7 @@ class ConstraintFilter:
                         if not is_valid_schema:
                             filtered_logits[token_id] = -math.inf
                         continue
+                    # 2-1. valueの開始地点、'"'を生成する時
                     elif state == FSMState.EXPECT_VALUE:
                         if stripped.startswith('"'):
                             content = stripped[1:]
@@ -300,20 +305,14 @@ class ConstraintFilter:
                                     filtered_logits[token_id] = -math.inf
                                 continue
 
-                # ルート以外の文字列(ネストされたキー)に対する自由生成を許可
+                # root以外の文字列(ネストされたkey)に対する自由生成を許可
                 if in_string:
                     continue
-                    # ホワイトリスト方式
-                    # filtered_logits[token_id] = logits[token_id]
-                    # continue
 
                 # Syntaxの強制
                 first_char = stripped[0]
                 if first_char not in allowed_chars:
                     filtered_logits[token_id] = -math.inf
-                # ホワイトリスト方式
-                # if first_char in allowed_chars:
-                    # filtered_logits[token_id] = logits[token_id]
 
             return filtered_logits
 

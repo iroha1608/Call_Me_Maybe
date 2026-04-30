@@ -1,5 +1,6 @@
 import sys
 import json
+import re
 from typing import Any
 
 from src.llm_client import LLMClient
@@ -69,10 +70,13 @@ class GenerationEngine:
                 current_text = self._tokenizer.decode(token_ids)
                 print(f"DEBUG: current_text='{current_text}'", file=sys.stderr)
 
+                # current_text -> clean_text
+                c_text = current_text.replace("Ċ", "\n").replace("Ġ", " ")
+                cl_text = c_text.strip()
+                clean_text = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', cl_text)
+
                 # _max_tokensの上限になる前に有効なJsonオブジェクトが
                 # 形成された時点でループ脱出 -> 計算資源を最適化
-                c_text = current_text.replace("Ċ", " ").replace("Ġ", " ")
-                clean_text = c_text.strip()
                 if clean_text.endswith("}"):
                     try:
                         print("DEBUG: End Pointに入りました", file=sys.stderr)
@@ -85,6 +89,16 @@ class GenerationEngine:
                         print("DEBUG: '}'終端済み、成形中", file=sys.stderr)
                         pass
 
+            c_text = current_text.replace("Ċ", "\n").replace("Ġ", " ")
+            cl_text = c_text.strip()
+            clean_text = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', cl_text)
+            try:
+                parsed_json = json.loads(clean_text)
+                if isinstance(parsed_json, dict):
+                    return parsed_json
+            except json.JSONDecodeError:
+                pass
+
             # _max_tokensを超えたらエラー送出
             raise EngineError(
                 "Maximum token reached without generating valid JSON."
@@ -93,4 +107,5 @@ class GenerationEngine:
         except Exception as e:
             print(f"EngineError: Generation pipeline failed."
                   f"{e}", file=sys.stderr)
-            return {"error": str(e), "status": "failed"}
+            return {"name": "unknown", "parameters": {
+                }}

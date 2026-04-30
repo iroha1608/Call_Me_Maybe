@@ -40,7 +40,9 @@ def _calculate_jaccard_similarity(
     name = _get_attr(fn_def, "name", "")
     desc = _get_attr(fn_def, "description", "")
 
-    name_words = set(name.lower().replace("_", " ").split())
+    name_words = set(
+        re.findall(r'[a-zA-Z0-9]+', name.lower().replace("_", " "))
+    )
     desc_words = set(re.findall(r'[a-zA-Z0-9_]+', desc.lower()))
     target_words = desc_words | name_words
 
@@ -52,7 +54,6 @@ def _calculate_jaccard_similarity(
 def _build_prompt(
     user_prompt: str, function_schema: list[FunctionDefinition]
 ) -> str:
-    # 関連性の高い上位2つの関数に絞り込む
     scored_functions = [
         (fn, _calculate_jaccard_similarity(user_prompt, fn))
         for fn in function_schema
@@ -75,15 +76,15 @@ def _build_prompt(
             'Greet emily',
             '{"name": "fn_greet", '
             '"parameters": {"name": "emily"}}'),
-            ('Say, hello to captain_falcon',
+            ('Say hello to captain',
                 '{"name": "fn_greet", '
-                '"parameters": {"name": "captain_falcon"}}')
+                '"parameters": {"name": "captain"}}')
         ],
         'fn_reverse_string': [(
             'Reverse the string \'apple\'',
             '{"name": "fn_reverse_string", '
             '"parameters": {"s": "apple"}}'),
-            ('Reverse  "XYZ_123"',
+            ('Reverse "XYZ_123"',
                 '{"name": "fn_reverse_string", '
                 '"parameters": {"s": "XYZ_123"}}')
         ],
@@ -95,19 +96,19 @@ def _build_prompt(
                 '{"name": "fn_get_square_root", '
                 '"parameters": {"a": "144.0"}}')
         ],
-        'fn_substitute_string_with_regix': [(
-            'Replace all numbers in "Item 42 is 5 dollars" with NUM',
+        'fn_substitute_string_with_regex': [(
+            'Replace all numbers in "I have 2 apples" with NUMBERS',
             '{"name": "fn_substitute_string_with_regex", '
             '"parameters": {'
-            '"source_string": "Item 42 is 5 dollars", '
+            '"source_string": "I have 2 apples", '
             '"regex": "\\\\d+", '
-            '"replacement": "NUM"}}'),
-            ('Replace all vowels in "Testing 123" with @',
+            '"replacement": "NUMBERS"}}'),
+            ('Replace all vowels in "Testing 123" with asterisks',
                 '{"name": "fn_substitute_string_with_regex", '
                 '"parameters": {'
                 '"source_string": "Testing 123", '
                 '"regex": "[aeiouAEIOU]", '
-                '"replacement": "@"}}'),
+                '"replacement": "*"}}'),
             ('Substitute the word "apple" with "orange" in "an apple a day"',
                 '{"name": "fn_substitute_string_with_regex", '
                 '"parameters": {'
@@ -116,13 +117,6 @@ def _build_prompt(
                 '"replacement": "orange"}}')
         ]
     }
-
-    # 最も関連性の高い関数の具体例を抽出
-    top_fn_name = _get_attr(top_functions[0], "name", "")
-    no_data_text = [
-        ("Extract data", '{"name": "unknown", "parameters": {}}')
-    ]
-    fn_examples = examples.get(top_fn_name, no_data_text)
 
     # Json -> mdへ変換
     markdown_schema = ""
@@ -142,21 +136,45 @@ def _build_prompt(
                 markdown_schema += f"    * {prop_name} ({prop_type})\n"
         markdown_schema += "\n"
 
+    # Main Prompt
     prompt = (
         "<|im_start|>system\n"
         "You are a helpful data extraction assistant.\n"
-        "Extract exactly what the user wrote "
-        "into the corresponding JSON parameters.\n"
-        "If asked to replace numbers, use the regex \"\\\\d+\". "
-        "If asked to replace vowels, use \"[aeiouAEIOU]\".\n"
+        "CRITICAL RULE: "
+        "You MUST copy the exact words and "
+        "capitalization from the user's input.\n"
         "Available functions:\n"
         f"{markdown_schema}"
         "<|im_end|>\n"
     )
-    # schema_str = json.dumps(function_schema, indent=2)
+    # 最も関連性の高い関数の具体例を抽出
+    top_fn_name = _get_attr(top_functions[0], "name", "")
+    no_data_text = [
+        ("Extract data", '{"name": "unknown", "parameters": {}}')
+    ]
+    fn_examples = examples.get(top_fn_name, no_data_text)
+
+    # さらに関連度の高い1例を取得
+    if len(fn_examples) > 1:
+        prompt_words = set(re.findall(r'[a-zA-Z0-9]+', user_prompt.lower()))
+        best_ex = fn_examples[0]
+        best_score = -1.0
+        for ex_u, ex_a in fn_examples:
+            ex_words = set(re.findall(r'[a-zA-Z0-9]+', ex_u.lower()))
+            intersection = prompt_words & ex_words
+
+            union = prompt_words | ex_words
+            score = len(intersection) / len(union) if union else 0.0
+            if score > best_score:
+                best_score = score
+                best_ex = (ex_u, ex_a)
+        fn_examples = [best_ex]
+
+    # 関数ごとの具体例を注入
     for ex_u, ex_a in fn_examples:
         prompt += f"<|im_start|>user\n{ex_u}\n<|im_end|>\n"
         prompt += f"<|im_start|>assistant\n{ex_a}\n<|im_end|>\n"
+        print(f"DEBUG: user='{ex_u}'\nassist='{ex_a}'")
     prompt += f"<|im_start|>user\n{user_prompt}\n<|im_end|>\n"
     prompt += "<|im_start|>assistant\n{\n"
 

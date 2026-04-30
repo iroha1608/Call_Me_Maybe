@@ -1,9 +1,15 @@
 [
   {
+    "prompt": "What is the sum of 2 and 3?"
+  },
+  {
     "prompt": "Greet shrek"
   },
   {
     "prompt": "Reverse the string 'hello'"
+  },
+  {
+    "prompt": "What is the square root of 16?"
   },
   {
     "prompt": "Replace all numbers in \"Hello 34 I'm 233 years old\" with NUMBERS"

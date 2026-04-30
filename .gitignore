@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # Project specific (Mandatory rule)
-./data/output/
+/data/output/*
 
 # Environments
 .env

@@ -156,7 +156,7 @@ class ConstraintFilter:
         # '"'の"'", その逆を抽出
         quoted = [
             m[0] or m[1]
-            for m in re.findall(r'["\']([^"\']+)["\']', user_prompt)
+            for m in re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
         ]
         words = user_prompt.split()
         p_lower = user_prompt.lower()

@@ -6,12 +6,15 @@ RM		:= rm -rf
 # Mandatory requirements
 # install, run, debug, clean, lint, lint-strict
 
-install:
-	$(UV) sync
+all: install
 
 # uvのインストール
 uv:
 	curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 仮想環境の作成、依存関係のインストール
+install:
+	$(UV) sync
 
 # 仮想環境のセットアップ
 setup:
@@ -43,7 +46,7 @@ lint:
 	- $(UV) run flake8 $(SRC_DIR)
 	- $(UV) run mypy $(SRC_DIR) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
 	- $(UV) run ruff check $(SRC_DIR)
-#	- $(UV) run ty check $(SRC_DIR)
+# 	- $(UV) run ty check $(SRC_DIR)
 
 lint-strict:
 	$(UV) run flake8 $(SRC_DIR)

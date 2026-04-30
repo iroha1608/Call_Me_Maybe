@@ -3,22 +3,43 @@ name = "call-me-maybe"
 version = "0.1.0"
 description = "Introduction to function calling in LLMs"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{"name" = "nsato", "email" = "nsato@student.42tokyo.jp"}]
+
 # これがないとプログラム実行時にエラー。
 dependencies = [
-	"numpy",
-	"pydantic"
+	"numpy>=2.4.4",
+	"pydantic>=2.12.5"
 ]
 # 実行ロジックに違いはないが、開発、テスト、静的解析に必要。
 [dependency-groups]
 dev = [
-	"flake8",
+	"flake8>=7.3.0",
 	"mypy",
 	"ruff",
 	"ty",
-	"pytest"
+	"pytest",
+	"llm-sdk"
+]
+
+[tool.uv.sources]
+llm-sdk = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+	"llm_sdk",
 ]
 
 [tool.mypy]
-exclude = ["llm_sdk/"]
+exclude = ["^llm_sdk/"]
+
+warn_return_any = true
+warn_unused_ignores = true
+ignore_missing_imports = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "llm_sdk.*"
+ignore_errors = true
+

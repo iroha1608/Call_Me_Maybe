@@ -1,5 +1,6 @@
 import sys
-from llm_sdk import Small_LLM_Model
+from typing import cast
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 
 
 class LLMClientError(Exception):
@@ -20,7 +21,9 @@ class LLMClient:
 
     def get_logits(self, input_ids: list[int]) -> list[float]:
         try:
-            return self._model.get_logits_from_input_ids(input_ids)
+            return cast(
+                list[float], self._model.get_logits_from_input_ids(input_ids)
+            )
         except Exception as e:
             print(f"LLMClientError: Logit retrieval failed."
                   f"{e}", file=sys.stderr)
@@ -28,7 +31,7 @@ class LLMClient:
 
     def get_path_to_vocabfile(self) -> str:
         try:
-            return self._model.get_path_to_vocab_file()
+            return cast(str, self._model.get_path_to_vocab_file())
         except Exception as e:
             print(f"LLMClientError: Vocab_file path retrieval failed."
                   f"{e}", file=sys.stderr)
@@ -36,7 +39,7 @@ class LLMClient:
 
     def get_path_to_mergefile(self) -> str:
         try:
-            return self._model.get_path_to_merges_file()
+            return cast(str, self._model.get_path_to_merges_file())
         except Exception as e:
             print(f"LLMClientError: Merges_file path retieval failed."
                   f"{e}", file=sys.stderr)
@@ -44,7 +47,7 @@ class LLMClient:
 
     def get_path_to_tokenfile(self) -> str:
         try:
-            return self._model.get_path_to_tokenizer_file()
+            return cast(str, self._model.get_path_to_tokenizer_file())
         except Exception as e:
             print(f"LLMClientError: Tokenizer_file path retieval failed."
                   f"{e}", file=sys.stderr)

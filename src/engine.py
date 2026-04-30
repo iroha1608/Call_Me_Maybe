@@ -64,22 +64,25 @@ class GenerationEngine:
                 print(f"DEBUG: next_token_id='{next_token_id}'",
                       file=sys.stderr)
                 token_ids.append(next_token_id)
-                # print(f"DEBUG: token_ids='{token_ids}'", file=sys.stderr)
 
                 # decode
                 current_text = self._tokenizer.decode(token_ids)
                 print(f"DEBUG: current_text='{current_text}'", file=sys.stderr)
+
                 # _max_tokensの上限になる前に有効なJsonオブジェクトが
                 # 形成された時点でループ脱出 -> 計算資源を最適化
-                if current_text.strip().endswith("}"):
+                c_text = current_text.replace("Ċ", " ").replace("Ġ", " ")
+                clean_text = c_text.strip()
+                if clean_text.endswith("}"):
                     try:
-                        print("DEBUG: End Pointに入りました")
-                        parsed_json = json.loads(current_text.strip())
+                        print("DEBUG: End Pointに入りました", file=sys.stderr)
+                        parsed_json = json.loads(clean_text)
                         if isinstance(parsed_json, dict):
                             return parsed_json
                     except json.JSONDecodeError:
-                        print("DEBUG: JSONDecodeErrorに入りました")
-                        print("DEBUG: '}'終端済み、成形中")
+                        print("DEBUG: JSONDecodeErrorに入りました",
+                              file=sys.stderr)
+                        print("DEBUG: '}'終端済み、成形中", file=sys.stderr)
                         pass
 
             # _max_tokensを超えたらエラー送出

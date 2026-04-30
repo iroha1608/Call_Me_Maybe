@@ -128,7 +128,9 @@ class ConstraintFilter:
             self._trie.insert(clean_str, stripped_str, t_id)
 
         self._cached_text = ""
-        self._cached_loop_state: tuple = (
+        self._cached_loop_state: tuple[
+            int, bool, bool, str, bool, str, str, frozenset[Any]
+        ] = (
             0, False, False, "", False, "", "", frozenset()
         )
 
@@ -144,7 +146,7 @@ class ConstraintFilter:
         self._cached_loop_state = (
             0, False, False, "", False, "", "", frozenset()
         )
-        self._prompt_token_ids = set(self._tokenizer.encode(user_prompt))
+        # self._prompt_token_ids = set(self._tokenizer.encode(user_prompt))
 
     def _calculate_target_function(self, user_prompt: str) -> str:
         """
@@ -176,7 +178,14 @@ class ConstraintFilter:
 
         return best_fn
 
-    def _run_fsm_loop(self, start_state: tuple, text_chunk: str) -> tuple:
+    def _run_fsm_loop(
+        self,
+        start_state: tuple[
+            int, bool, bool, str, bool, str, str, frozenset[Any]],
+        text_chunk: str
+    ) -> tuple[
+            int, bool, bool, str, bool, str, str, frozenset[Any]
+    ]:
         (depth, in_string, escape, last_structural_char, is_value_context,
          current_string, last_key, seen_root_keys) = start_state
 
@@ -238,7 +247,7 @@ class ConstraintFilter:
 
         Returns:
             state: 次に期待される構文状態
-            depth: 括弧のスタック(ネストの深さ測定用)
+            depth: int 括弧のスタック(ネストの深さ測定用)
             current_string: 現在入力中の文字列の中身
             in_string: 文字列内部にいるかのフラグ
             is_value_context: ":"の後 -> True、",", "{}"の後 -> False
@@ -257,7 +266,9 @@ class ConstraintFilter:
             new_chunk = current_text[len(self._cached_text):]
             loop_state = self._run_fsm_loop(self._cached_loop_state, new_chunk)
         else:
-            initial_state: tuple = (
+            initial_state: tuple[
+                int, bool, bool, str, bool, str, str, frozenset[Any]
+            ] = (
                 0, False, False, "", False, "", "", frozenset()
             )
             loop_state = self._run_fsm_loop(initial_state, current_text)
@@ -393,7 +404,7 @@ class ConstraintFilter:
             # 関数名が未確定の場合、
             # デッドロック回避で全関数のキーを許可
             if not allowed_param_keys:
-                all_keys: set = set()
+                all_keys: set[str] = set()
                 for fn in self._available_functions:
                     params = _get_attr(fn, "parameters", {})
                     if isinstance(params, dict):
@@ -548,9 +559,9 @@ class ConstraintFilter:
                     filtered_logits[t_id] += 10.0
 
                 # promptに含まれるtokenに下駄を履かせる
-                if depth >= 2 and in_string:
-                    if t_id in self._prompt_token_ids:
-                        filtered_logits[t_id] += 10.0
+                # if depth >= 2 and in_string:
+                    # if t_id in self._prompt_token_ids:
+                    # filtered_logits[t_id] += 10.0
 
                 if state == FSMState.DONE:
                     filtered_logits[t_id] += 100.0

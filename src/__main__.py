@@ -60,42 +60,69 @@ def _build_prompt(
     scored_functions.sort(key=lambda x: x[1], reverse=True)
     top_functions = [fn for fn, score in scored_functions[:2]]
 
-    # 動的Few-shotの定義
+    # 動的Few-shot, 丸暗記ではないモデルの学習
     # 正規表現、引数のマッピング規則の学習
-    examples = {
-            'fn_add_numbers': 'User: What is the sum of 10 and 5?\n'
-            'Assistant:\n'
-            '{"name": "fn_add_numbers", '
-            '"parameter": {"a": 10.0, "b": 5.0}}',
-            'fn_greet': 'User: Greet Alice\n'
-            'Assistant:\n'
+    examples: dict[str, list[Any]] = {
+        'fn_add_numbers': [(
+                'What is the sum of 10 and 5?',
+                '{"name": "fn_add_numbers", '
+                '"parameters": {"a": 10.0, "b": 5.0}}'),
+            ('Add 42 and 8',
+                '{"name": "fn_add_numbers", '
+                '"parameters": {"a": 42.0, "b": 8.0}}')
+        ],
+        'fn_greet': [(
+            'Greet emily',
             '{"name": "fn_greet", '
-            '"parameter": {"name": "Alice"}}',
-            'fn_reverse_string': 'User: Reverse the string \'world\'\n'
-            'Assistant:\n'
+            '"parameters": {"name": "emily"}}'),
+            ('Say, hello to captain_falcon',
+                '{"name": "fn_greet", '
+                '"parameters": {"name": "captain_falcon"}}')
+        ],
+        'fn_reverse_string': [(
+            'Reverse the string \'apple\'',
             '{"name": "fn_reverse_string", '
-            '"parameter": {"s": "world"}}',
-            'fn_get_square_root': 'User: What is the square root of 9?\n'
-            'Assistant:\n'
+            '"parameters": {"s": "apple"}}'),
+            ('Reverse  "XYZ_123"',
+                '{"name": "fn_reverse_string", '
+                '"parameters": {"s": "XYZ_123"}}')
+        ],
+        'fn_get_square_root': [(
+            'What is the square root of 9?',
             '{"name": "fn_get_square_root", '
-            '"parameter": {"a": "9.0"}}',
-            'fn_substitute_string_with_regix':
-            'User: Replace all numbers in "I have 2 apples" with X\n'
-            'Assistant:\n'
-            '{"name": "fn_substitute_string_with_regix", '
-            '"parameter": {'
-            '"source_string": "I have 2 apples", '
-            '"regix": "\\\\d+", '
-            '"replacement": "X"}}'
+            '"parameters": {"a": "9.0"}}'),
+            ('Calculate the square root of 144',
+                '{"name": "fn_get_square_root", '
+                '"parameters": {"a": "144.0"}}')
+        ],
+        'fn_substitute_string_with_regix': [(
+            'Replace all numbers in "Item 42 is 5 dollars" with NUM',
+            '{"name": "fn_substitute_string_with_regex", '
+            '"parameters": {'
+            '"source_string": "Item 42 is 5 dollars", '
+            '"regex": "\\\\d+", '
+            '"replacement": "NUM"}}'),
+            ('Replace all vowels in "Testing 123" with @',
+                '{"name": "fn_substitute_string_with_regex", '
+                '"parameters": {'
+                '"source_string": "Testing 123", '
+                '"regex": "[aeiouAEIOU]", '
+                '"replacement": "@"}}'),
+            ('Substitute the word "apple" with "orange" in "an apple a day"',
+                '{"name": "fn_substitute_string_with_regex", '
+                '"parameters": {'
+                '"source_string": "an apple a day", '
+                '"regex": "apple", '
+                '"replacement": "orange"}}')
+        ]
     }
 
     # 最も関連性の高い関数の具体例を抽出
     top_fn_name = _get_attr(top_functions[0], "name", "")
-    no_data_text: str = (
-        'User: Extract data\nAssistant:\n'
-        '{"name": "unknown", "parameters": {}}'
-    )
-    few_shot_example = examples.get(top_fn_name, no_data_text)
+    no_data_text = [
+        ("Extract data", '{"name": "unknown", "parameters": {}}')
+    ]
+    fn_examples = examples.get(top_fn_name, no_data_text)
 
     # Json -> mdへ変換
     markdown_schema = ""
@@ -115,25 +142,31 @@ def _build_prompt(
                 markdown_schema += f"    * {prop_name} ({prop_type})\n"
         markdown_schema += "\n"
 
-    return (
+    prompt = (
         "<|im_start|>system\n"
-        "You are a strict data extraction engine. "
-        "Extract exact values from the user's input "
-        "based on the provided functions.\n"
-        "Output ONLY a valid JSON object. "
-        "Do not output anything else.\n\n"
-        "Example:\n"
-        f"{few_shot_example}"
+        "You are a strict data extraction API. "
+        "Your ONLY job is to extract substring from the user's input.\n"
+        "CRITICAL RULES:\n"
+        "1. COPY EXACTLY: "
+        "You MUST copy names, strings, and sentences "
+        "EXACTLY as written by the user. "
+        "Do NOT miss spaces, capitalization, or punctuation.\n"
+        "2. REGEX RULE: "
+        "If asked to replace numbers, use \"\\\\d+\". "
+        "If asked to replace vowels, use \"[aeiouAEIOU]\".\n"
+        "3. Output ONLY a valid JSON object.\n\n"
         "Available functions:\n"
         f"{markdown_schema}"
         "<|im_end|>\n"
-        "<|im_start|>user\n"
-        f"{user_prompt}\n"
-        "<|im_end|>\n"
-        "<|im_start|>assistant\n"
-        "{\n"
     )
     # schema_str = json.dumps(function_schema, indent=2)
+    for ex_u, ex_a in fn_examples:
+        prompt += f"<|im_start|>user\n{ex_u}\n<|im_end|>\n"
+        prompt += f"<|im_start|>assistant\n{ex_a}\n<|im_end|>\n"
+    prompt += f"<|im_start|>user\n{user_prompt}\n<|im_end|>\n"
+    prompt += "<|im_start|>assistant\n{\n"
+
+    return prompt
 
 
 def _save_json_file(file_path: str, results: Any) -> None:

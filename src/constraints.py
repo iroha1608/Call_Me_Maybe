@@ -660,6 +660,7 @@ class ConstraintFilter:
 
                         # "parameters": {"type": "string"}の時
                         if param_type == "string":
+                            print("stringに入ってる?")
                             # 生成中の文字列がプロンプト中の引用符と一致
                             is_exact_match = False
                             # 生成中の文字列がプロンプトの引用符のprefix
@@ -667,26 +668,31 @@ class ConstraintFilter:
                             for phrase in getattr(self, "_quoted_phrases", []):
                                 if current_string == phrase:
                                     is_exact_match = True
-                                    break
-                                elif phrase.startswith(new_str):
+                                elif phrase.startswith(current_str) and current_str != phrase and current_string != "":
                                     is_prefix_of_phrase = True
-                            # 終端(")の処理
-                            if clean_str.strip() == '"':
-                                if is_prefix_of_phrase and not is_exact_match:
-                                    continue
-                                else:
+
+                            if getattr(self, "_raw_user_prompt", ""):
+                                print("getattrに入ってる?")
+                                # 生成中の文字列がプロンプトと合致
+                                if new_str in self._raw_user_prompt:
                                     valid_token_ids.add(t_id)
-                                continue
-                            if '"' in clean_str:
-                                continue
-                            if is_exact_match and not is_prefix_of_phrase:
-                                continue
-
-                            valid_token_ids.add(t_id)
-
-                            for phrase in getattr(self, "_quoted_phrases", []):
-                                if phrase.startswith(new_str):
                                     p_aligned_t_ids.add(t_id)
+                                elif new_str.endswith('"'):
+                                    cont = new_str[:-1]
+                                    if cont in self._raw_user_prompt:
+                                        idx = self._raw_user_prompt.find(cont)
+                                        if idx != -1:
+                                            end_idx = idx + len(cont)
+                                            if end_idx == len(self._raw_user_prompt) or not self._raw_user_prompt[end_idx].isalnum():
+                                                valid_token_ids.add(t_id)
+                                                p_aligned_t_ids.add(t_id)
+
+                                    elif clean_str.strip() == '"':
+                                        valid_token_ids.add(t_id)
+                                elif clean_str.strip() == '"':
+                                    valid_token_ids.add(t_id)
+                            elif clean_str.strip() == '"':
+                                    valid_token_ids.add(t_id)
 
                         # "parameters": {"type": "number"}の時
                         elif param_type == "number":
@@ -729,6 +735,7 @@ class ConstraintFilter:
 
             # 許可したtoken_idがない時、暴走防止
             if not valid_token_ids:
+                print("許可tokenなし")
                 return logits
 
             return filtered_logits

@@ -541,14 +541,16 @@ class ConstraintFilter:
                         valid_token_ids = filtered_valid_ids
 
                 # 1-1. root key, parameter keyの処理
-                if (depth == 1 or depth == 2) and not is_value_context:
+                if (depth == 1 or depth == 2) and state == FSMState.EXPECT_KEY:
                     filtered_valid_ids = set()
                     # root key(name, parameters)が入る。
                     if depth == 1:
                         keys_to_check = available_root_keys
                     # 使用関数のparameters内のkey(変数名)が入る。
                     else:
-                        keys_to_check = list(set(expected_param_keys) - seen_param_keys)
+                        keys_to_check = list(
+                            set(expected_param_keys) - seen_param_keys
+                        )
 
                     # 許可したtoken_idから1つずつチェック
                     if keys_to_check:
@@ -568,6 +570,7 @@ class ConstraintFilter:
                                 if not t_str.strip(' \n\r\tĊ'):
                                     filtered_valid_ids.add(t_id)
 
+                    # フィルタリングした結果で上書き
                     valid_token_ids = filtered_valid_ids
 
                 # 1-2. nameのvalue(関数名)の直前の時
@@ -615,7 +618,9 @@ class ConstraintFilter:
                         keys_to_check = available_root_keys
                     # 2-3-1. 最適関数の"parameters"内のkey(引数名)
                     else:
-                        keys_to_check = list(set(expected_param_keys) - seen_param_keys)
+                        keys_to_check = list(
+                            set(expected_param_keys) - seen_param_keys
+                        )
 
                     # 語彙からid, strをループ
                     if keys_to_check:
@@ -660,7 +665,6 @@ class ConstraintFilter:
 
                         # "parameters": {"type": "string"}の時
                         if param_type == "string":
-                            print("stringに入ってる?")
                             # 生成中の文字列がプロンプト中の引用符と一致
                             is_exact_match = False
                             # 生成中の文字列がプロンプトの引用符のprefix
@@ -668,11 +672,13 @@ class ConstraintFilter:
                             for phrase in getattr(self, "_quoted_phrases", []):
                                 if current_string == phrase:
                                     is_exact_match = True
-                                elif phrase.startswith(current_str) and current_str != phrase and current_string != "":
+                                elif phrase.startswith(
+                                    current_string) and (
+                                        current_string != phrase) and (
+                                        current_string != ""):
                                     is_prefix_of_phrase = True
 
                             if getattr(self, "_raw_user_prompt", ""):
-                                print("getattrに入ってる?")
                                 # 生成中の文字列がプロンプトと合致
                                 if new_str in self._raw_user_prompt:
                                     valid_token_ids.add(t_id)
@@ -683,16 +689,25 @@ class ConstraintFilter:
                                         idx = self._raw_user_prompt.find(cont)
                                         if idx != -1:
                                             end_idx = idx + len(cont)
-                                            if end_idx == len(self._raw_user_prompt) or not self._raw_user_prompt[end_idx].isalnum():
+                                            if end_idx == len(
+                                                self._raw_user_prompt) or (
+                                                    not self._raw_user_prompt[
+                                                        end_idx].isalnum()):
                                                 valid_token_ids.add(t_id)
                                                 p_aligned_t_ids.add(t_id)
 
                                     elif clean_str.strip() == '"':
                                         valid_token_ids.add(t_id)
+                                    else:
+                                        valid_token_ids.add(t_id)
                                 elif clean_str.strip() == '"':
                                     valid_token_ids.add(t_id)
-                            elif clean_str.strip() == '"':
+                                else:
                                     valid_token_ids.add(t_id)
+                            elif clean_str.strip() == '"':
+                                valid_token_ids.add(t_id)
+                            else:
+                                valid_token_ids.add(t_id)
 
                         # "parameters": {"type": "number"}の時
                         elif param_type == "number":

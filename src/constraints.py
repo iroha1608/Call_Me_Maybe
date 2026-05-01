@@ -93,6 +93,7 @@ class TokenTrie:
 
 
 def _get_attr(obj: Any, key: str, default: Any = "") -> Any:
+    """dict object避け"""
     if isinstance(obj, dict):
         return obj.get(key, default)
     return getattr(obj, key, default)
@@ -123,6 +124,7 @@ class ConstraintFilter:
 
         # Trie木の初期化と全語彙の登録(空間計算量 O(V * 平均長))、一度のみ実行
         self._trie = TokenTrie()
+        # 語彙からid, strをループ
         for t_id, t_str in self._vocab_items:
             clean_str = t_str.replace("Ġ", " ")
             stripped_str = clean_str.lstrip()
@@ -140,7 +142,7 @@ class ConstraintFilter:
             推論ループ内でプロンプトごとに呼び出し、
             標的関数の再計算とFSMの差分キャッシュをリセットする。
         """
-        # FSM内での動的Logit Bias(Semantic Logit Ste事eリング前計算
+        # 最適な関数の取得
         self._target_fn_name = self._calculate_target_function(user_prompt)
         self._cached_text = ""
         self._cached_loop_state = (
@@ -150,55 +152,9 @@ class ConstraintFilter:
         self._prompt_token_ids = set(self._tokenizer.encode(user_prompt))
         # 生プロンプトの保存
         self._raw_user_prompt = user_prompt
-
-        # プロンプトの動的引数抽出(汎用パーサー)
-        self._expected_values = {}
-        # '"'の"'", その逆を抽出
-        quoted = [
-            m[0] or m[1]
-            for m in re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
-        ]
-        words = user_prompt.split()
-        p_lower = user_prompt.lower()
-
-        if self._target_fn_name == "fn_greet" and len(words) > 1:
-            self._expected_values["name"] = words[-1]
-            print("バグここだよ4")
-        elif self._target_fn_name == "fn_reverse_string" and quoted:
-            self._expected_values["s"] = quoted[0]
-            print("バグここだよ5")
-        elif self._target_fn_name == "fn_substitute_string_with_regex":
-            print("バグここだよ6")
-            if len(quoted) >= 3:
-                self._expected_values["regex"] = quoted[0]
-                self._expected_values["replacement"] = quoted[1]
-                self._expected_values["source_string"] = quoted[2]
-                print("バグここだよ7")
-            elif quoted:
-                print("バグここだよ8")
-                self._expected_values["source_string"] = max(quoted, key=len)
-            print("バグここだよ9")
-            with_match = re.search(
-                r'\bwith\s+([a-zA-Z0-9_*]+|\'[^\']+\'|"[^"]+")', user_prompt
-            )
-            print("バグここだよ10")
-            if with_match and "replacement" not in self._expected_values:
-                print("バグここだよ11")
-                rep = with_match.group(1).strip('"\'')
-                print("バグここだよ12")
-                if rep.lower() == "asterisks":
-                    print("バグここだよ16")
-                    self._expected_values["replacement"] = "*"
-                else:
-                    print("バグここだよ13")
-                    self._expected_values["replacement"] = rep
-            print("バグここだよ15")
-            if "regex" not in self._expected_values:
-                print("バグここだよ14")
-                if "vowels" in p_lower:
-                    self._expected_values["regex"] = "[aeiouAEIOU]"
-                elif "numbers" in p_lower:
-                    self._expected_values["regex"] = r"\d+"
+        # 引用符('"', "'")で囲まれたフレーズの保存
+        phrases = re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
+        self._quoted_phrases = [m[0] or m[1] for m in phrases]
 
     def _calculate_target_function(self, user_prompt: str) -> str:
         """
@@ -231,6 +187,22 @@ class ConstraintFilter:
                 best_fn = name
 
         return best_fn
+
+    def _get_current_function_schema(self) -> dict[str, dict[str, str]]:
+        """
+            選択された関数(_target_fn_name)の"parameters"を動的に取得。
+            Returnの例: {"source_string": { "type": "string"},
+                         "regex":{ "type": "string"}}
+        """
+        # 最適な関数がない場合
+        if not self._target_fn_name:
+            return {}
+        for fn in self._available_functions:
+            if _get_attr(fn, "name") == self._target_fn_name:
+                params = _get_attr(fn, "parameters", {})
+                if isinstance(params, dict):
+                    return params
+        return {}
 
     def _run_fsm_loop(
         self,
@@ -396,10 +368,13 @@ class ConstraintFilter:
         self, logits: list[float], current_text: str
     ) -> list[float]:
         """
-        状態遷移(FSM)アルゴリズム、 プッシュダウンオートマトン(PDA)
+            制約付きデコーディングのメインロジック。
+            状態遷移(FSM)アルゴリズム、 プッシュダウンオートマトン(PDA)。
         """
         try:
             # 1. current_textを解析
+            # 次のJson構造文字、ネストの深さ、現在の文字列、文字列中フラグ
+            # valueの中フラグ、最後に出力したkey、これまでに出たroot key
             (state, depth, current_string, in_string,
              is_value_context, last_key, seen_root_keys) = (
                 self._determine_current_state(current_text)
@@ -411,58 +386,87 @@ class ConstraintFilter:
             is_root_level = (depth == 1)
             # 現在の状態に合わせて許容する文字を取得
             allowed_chars = self._get_allowed_characters(state, depth)
+            # ソフト制約
+            # "parameter"のvalueかつ引数の中身の時使用、ループ前に初期化
+            p_aligned_t_ids = set()
 
-            # root, keyを一つ生成後、"name", "parameters"の両方を強制
-            if is_root_level and state == FSMState.EXPECT_COMMA_OR_END_OBJECT:
-                # keyが"name"しか出てない時、終了を禁止
-                if "name" in seen_root_keys and (
-                        "parameters" not in seen_root_keys):
-                    allowed_chars = {",", " ", "\n", "\t", "\r"}
-                # "name", "parameter"が出た時、終了を許可
-                if "name" in seen_root_keys and (
-                        "parameters" in seen_root_keys):
-                    allowed_chars = {"}", " ", "\n", "\t", "\r"}
-            # root, 次はvalue, 前のkeyが"parameters"の時、"{"を強制
-            if is_root_level and (
-                    state == FSMState.EXPECT_VALUE) and (
-                            last_key == "parameters"):
-                allowed_chars = {"{", " ", "\n", "\t", "\r"}
-            # root keyの順番の強制(name -> parameters)
-            # 使用したら削除, 同じ必須keyのループ防止
-            if "name" not in seen_root_keys:
-                available_root_keys = ["name"]
-            elif "parameters" not in seen_root_keys:
-                available_root_keys = ["parameters"]
-            else:
-                available_root_keys = []
-
+            # -------------------- 必須keyの処理 --------------------
             # 選択された関数名の動的取得とスキーマ解析
             selected_fn = self._target_fn_name
             name_match = re.search(r'"name"\s*:\s*"([^"]+)"', current_text)
             if name_match:
                 selected_fn = name_match.group(1)
 
-            allowed_param_keys = []
+            # 使用関数からparametersを取得できた時、
+            # parameters内のkey(変数名)を保存
+            expected_param_keys = []
             if selected_fn:
                 for fn in self._available_functions:
                     if _get_attr(fn, "name") == selected_fn:
                         params = _get_attr(fn, "parameters", {})
-                        # 使用関数からparametersを取得できた時、
-                        # parameters内のkey(変数名)を保存
                         if isinstance(params, dict):
-                            allowed_param_keys = list(params.keys())
+                            expected_param_keys = list(params.keys())
                         break
-
-            # 関数名が未確定、上記で変数名が取得できなかった場合、
-            # 全関数のkeyからparametersを取得、デッドロックを回避
-            if not allowed_param_keys:
+            # 関数名が未確定、上記でkey(変数名)が取得できなかった時、
+            # 全関数のkeyからparametersを取得、デッドロック回避
+            if not expected_param_keys and not selected_fn:
                 all_keys: set[str] = set()
                 for fn in self._available_functions:
                     params = _get_attr(fn, "parameters", {})
                     if isinstance(params, dict):
                         all_keys.update(params.keys())
-                allowed_param_keys = list(all_keys)
-                # -----関数のparametersが何もないときの処理も追加したい
+                expected_param_keys = list(all_keys)
+                # ----- 関数のparametersが何もないときの処理も追加したい -----
+
+            # parametersの出現状況を解析、更新
+            seen_param_keys = set()
+            param_match = re.search(
+                r'"parameters"\s*:\s*\{(.*)', current_text, re.DOTALL
+            )
+            if param_match:
+                seen_param_keys = set(
+                    re.findall(r'"([^"]+)"\s*:', param_match.group(1))
+                )
+            # root, keyを一つ生成後、"name", "parameters"の両方を強制
+            if state == FSMState.EXPECT_COMMA_OR_END_OBJECT:
+                if is_root_level:
+                    # keyが"name"しか出てない時、継続許可、終了禁止
+                    if "name" in seen_root_keys and (
+                            "parameters" not in seen_root_keys):
+                        allowed_chars = {",", " ", "\n", "\t", "\r"}
+                    # "name", "parameter"が出た時、継続禁止、終了許可
+                    elif "name" in seen_root_keys and (
+                            "parameters" in seen_root_keys):
+                        allowed_chars = {"}", " ", "\n", "\t", "\r"}
+                elif depth == 2:
+                    # "parameters"のkeyが残ってる時、継続許可、終了禁止
+                    if len(seen_param_keys) < len(expected_param_keys):
+                        allowed_chars = {",", " ", "\n", "\t", "\r"}
+                    # すべてのkeyが揃った時、継続禁止、終了許可
+                    else:
+                        allowed_chars = {"}", " ", "\n", "\t", "\r"}
+
+            # root, 次はvalue, 前のkeyが"parameters"の時
+            if is_root_level and (
+                    state == FSMState.EXPECT_VALUE) and (
+                            last_key == "parameters"):
+                # "{"を強制
+                allowed_chars = {"{", " ", "\n", "\t", "\r"}
+
+            # 引数のない関数の時
+            if not is_root_level and (
+                    state == FSMState.EXPECT_KEY and depth == 2):
+                # keyの入力禁止、終了許可
+                if len(expected_param_keys) == 0:
+                    allowed_chars = {"}", " ", "\n", "\t", "\r"}
+
+            # root keyの順番の強制(name -> parameters)
+            if "name" not in seen_root_keys:
+                available_root_keys = ["name"]
+            elif "parameters" not in seen_root_keys:
+                available_root_keys = ["parameters"]
+            else:
+                available_root_keys = []
 
             # 許可済み制御文字から空白を抜いたもの
             allowed_structural = {
@@ -475,18 +479,17 @@ class ConstraintFilter:
             # 空白tokenの補充
             if " " in allowed_chars or "\n" in allowed_chars:
                 valid_token_ids.update(self._trie.whitespace_token_ids)
+            # -------------------- 必須keyの処理 --------------------
 
-            # Trie木を用いたO(1) ~ O(L) の語彙フィルタリング
+            # ---------- Trie木を用いた 語彙フィルタリング ----------
             # 1. 構文文字(':', ',', '{}'etc...)の待機時
             if not in_string:
-
-                # TrieのハッシュマップからO(1)で許可token群取得
+                # 1-1. TrieのハッシュマップからO(1)で許可token群取得
                 for char in allowed_structural:
                     if char in self._trie.first_char_index:
                         valid_token_ids.update(
                             self._trie.first_char_index[char]
                         )
-
                 # 許可されていない構造文字セット
                 dis_allowed_structural = (
                         {'"', '{', '}', '[', ']', ':', ','} - allowed_chars)
@@ -507,10 +510,10 @@ class ConstraintFilter:
                             continue
                     clean_valid_ids.add(t_id)
 
-                # cleanにしたtoken_idのみ許可
+                # 1-2. cleanにしたtoken_idのみ許可
                 valid_token_ids = clean_valid_ids
 
-                # DONEに到達時、eos_tokenの確率を引き上げ
+                # 3. DONEに到達時、eos_tokenの確率を引き上げ
                 if state == FSMState.DONE:
                     # 既存許可リストをクリア
                     valid_token_ids = set()
@@ -527,7 +530,8 @@ class ConstraintFilter:
                     # 必須root key("name", "parameter")が出てたら
                     if len(seen_root_keys) >= len(self._allowed_root_keys):
                         filtered_valid_ids = set()
-                        # 許可したtoken_idから、',', '"'がないものをフィルタ
+                        # 許可したtoken_idから1つずつチェック
+                        # ',', '"'がないものをフィルタ
                         for t_id in valid_token_ids:
                             t_str = (self._tokenizer._id_to_token.get(
                                     t_id, "").replace("Ġ", " ")
@@ -539,25 +543,26 @@ class ConstraintFilter:
                 # 1-1. root key, parameter keyの処理
                 if (depth == 1 or depth == 2) and not is_value_context:
                     filtered_valid_ids = set()
+                    # root key(name, parameters)が入る。
                     if depth == 1:
                         keys_to_check = available_root_keys
-                    # depth == 2の時、使用関数のparameters内のkey(変数名が入る)
+                    # 使用関数のparameters内のkey(変数名)が入る。
                     else:
-                        keys_to_check = allowed_param_keys
+                        keys_to_check = list(set(expected_param_keys) - seen_param_keys)
 
-                    for t_id in valid_token_ids:
-                        t_str = (
-                            self._tokenizer._id_to_token.get(
-                                t_id, "").replace("Ġ", " ")
-                        )
-                        if '"' in t_str:
-                            content = t_str[t_str.find('"') + 1:]
-                            if not keys_to_check or (
-                                    not content) or (
-                                    any((k.startswith(content)) or (
+                    # 許可したtoken_idから1つずつチェック
+                    if keys_to_check:
+                        for t_id in valid_token_ids:
+                            t_str = (
+                                self._tokenizer._id_to_token.get(
+                                    t_id, "").replace("Ġ", " "))
+                            if '"' in t_str:
+                                content = t_str[t_str.find('"') + 1:]
+                                if (not content) or (
+                                        any((k.startswith(content)) or (
                                         content == k + '"')
                                         for k in keys_to_check)):
-                                filtered_valid_ids.add(t_id)
+                                    filtered_valid_ids.add(t_id)
                             else:
                                 # 引用符を含まない時、純粋な空白tokenのみ許可
                                 if not t_str.strip(' \n\r\tĊ'):
@@ -565,12 +570,13 @@ class ConstraintFilter:
 
                     valid_token_ids = filtered_valid_ids
 
-                # 1-2. nameのvalue(関数名)の時
+                # 1-2. nameのvalue(関数名)の直前の時
                 if is_root_level and (
                         state == FSMState.EXPECT_VALUE) and (
                         last_key == "name"):
                     filtered_valid_ids = set()
 
+                    # 許可したtoken_idから1つずつチェック
                     for t_id in valid_token_ids:
                         t_str = (
                             self._tokenizer._id_to_token.get(
@@ -603,25 +609,27 @@ class ConstraintFilter:
 
             # 2. 文字列内部の処理
             else:
-                # 2-1. root key, parameter keyの処理
+                # 2-1. 2-3. root key(name, parameters), parameter keyの処理
                 if (depth == 1 or depth == 2) and not is_value_context:
-                    if depth == 1:
+                    if is_root_level:
                         keys_to_check = available_root_keys
-                    # depth == 2の時、使用関数のparameters内のkey(変数名が入る)
+                    # 2-3-1. 最適関数の"parameters"内のkey(引数名)
                     else:
-                        keys_to_check = allowed_param_keys
+                        keys_to_check = list(set(expected_param_keys) - seen_param_keys)
 
-                    for t_id, t_str in self._vocab_items:
-                        clean_str = t_str.replace("Ġ", " ")
-                        new_str = current_string + clean_str
-                        if not keys_to_check or (
-                                any((k.startswith(new_str)) or (
+                    # 語彙からid, strをループ
+                    if keys_to_check:
+                        for t_id, t_str in self._vocab_items:
+                            clean_str = t_str.replace("Ġ", " ")
+                            new_str = current_string + clean_str
+                            if any((k.startswith(new_str)) or (
                                     new_str == k + '"')
-                                    for k in keys_to_check)):
-                            valid_token_ids.add(t_id)
+                                    for k in keys_to_check):
+                                valid_token_ids.add(t_id)
 
                 # 2-2. nameのvalue(関数名)の処理
                 elif is_root_level and is_value_context and last_key == "name":
+                    # 語彙からid, strをループ
                     for t_id, t_str in self._vocab_items:
                         clean_str = t_str.replace("Ġ", " ")
                         new_str = current_string + clean_str
@@ -635,51 +643,62 @@ class ConstraintFilter:
                                     for fn in self._valid_fn_names):
                                 valid_token_ids.add(t_id)
 
-                # parameterのvalueかつ引数の中身の時
+                # 2-4. "parameter"のvalueかつ引数の中身の時
                 elif depth == 2 and is_value_context:
-                    print("parameterのvalueに入ったよ~")
+                    print("'parameter'のvalueに入ったよ~")
+                    # 現在の最適関数のschemaを取得
+                    current_schema = self._get_current_function_schema()
+                    # 入力中のkeyの情報を取得
+                    current_param_info = current_schema.get(last_key, {})
+                    # デフォルトでstr型に設定
+                    param_type = current_param_info.get("type", "string")
+
+                    # 語彙からid, strをループ
                     for t_id, t_str in self._vocab_items:
                         clean_str = t_str.replace("Ġ", " ")
                         new_str = current_string + clean_str
 
-                        # 引数の型が単純なstrの時
-                        if last_key in [
-                                    "source_string", "s", "name",
-                                    "regex", "replacement"
-                                ]:
-                            expected_val = getattr(
-                                self, "_expected_values", {}).get(last_key)
+                        # "parameters": {"type": "string"}の時
+                        if param_type == "string":
+                            # 生成中の文字列がプロンプト中の引用符と一致
+                            is_exact_match = False
+                            # 生成中の文字列がプロンプトの引用符のprefix
+                            is_prefix_of_phrase = False
+                            for phrase in getattr(self, "_quoted_phrases", []):
+                                if current_string == phrase:
+                                    is_exact_match = True
+                                    break
+                                elif phrase.startswith(new_str):
+                                    is_prefix_of_phrase = True
+                            # 終端(")の処理
+                            if clean_str.strip() == '"':
+                                if is_prefix_of_phrase and not is_exact_match:
+                                    continue
+                                else:
+                                    valid_token_ids.add(t_id)
+                                continue
+                            if '"' in clean_str:
+                                continue
+                            if is_exact_match and not is_prefix_of_phrase:
+                                continue
 
-                            # 正解が存在時
-                            if expected_val is not None:
-                                if expected_val.startswith(new_str):
-                                    valid_token_ids.add(t_id)
-                                elif new_str == expected_val + '"':
-                                    valid_token_ids.add(t_id)
+                            valid_token_ids.add(t_id)
 
-                            # 無い時はプロンプト部分一致
-                            elif getattr(self, "_raw_user_prompt", ""):
-                                # 生成中の文字列がpromptに含まれる時、継続
-                                if new_str in self._raw_user_prompt:
-                                    valid_token_ids.add(t_id)
-                                # 終端が " かつプロンプトと一致で完了
-                                elif new_str.endswith('"'):
-                                    cont = new_str[:-1]
-                                    if cont in self._raw_user_prompt:
-                                        idx = self._raw_user_prompt.find(cont)
-                                        if idx != -1:
-                                            end_idx = idx + len(cont)
-                                            if end_idx == len(self._raw_user_prompt) or not self._raw_user_prompt[end_idx].isalnum():
-                                                valid_token_ids.add(t_id)
-                                        valid_token_ids.add(t_id)
-                                    # regex等、プロンプトにない場合
-                                    elif last_key in ["regex", "relacement"]:
-                                        valid_token_ids.add(t_id)
+                            for phrase in getattr(self, "_quoted_phrases", []):
+                                if phrase.startswith(new_str):
+                                    p_aligned_t_ids.add(t_id)
 
-                                # regex等自由生成用
-                                elif last_key in ["regex", "relacement"]:
-                                    valid_token_ids.add(t_id)
-                            else:
+                        # "parameters": {"type": "number"}の時
+                        elif param_type == "number":
+                            if all(c in '0123456789.-+eE"'
+                                        for c in clean_str.strip()):
+                                valid_token_ids.add(t_id)
+                        # "parameters": {"type": "boolean"}の時
+                        elif param_type == "boolean":
+                            if any(("true".startswith(new_str) or (
+                                "false".startswith(new_str)) or (
+                                    new_str == "true") or (
+                                        new_str == "false")) for _ in [1]):
                                 valid_token_ids.add(t_id)
                         else:
                             valid_token_ids.add(t_id)
@@ -690,17 +709,25 @@ class ConstraintFilter:
                         t_id for t_id, _ in self._vocab_items
                     )
 
-            # Logitsの再構築とSemantic Logit Steering
+            # Logitsの再構築とSemantic Logit Steering + ソフト制約
+            # 許可したtoken_idから1つずつチェック
             for t_id in valid_token_ids:
                 filtered_logits[t_id] = logits[t_id]
 
+                # name keyに対する関数のtokenに加算
                 if is_root_level and is_value_context and (
                         last_key == "name" and self._target_fn_name):
                     filtered_logits[t_id] += 10.0
 
+                # prompt一致のtokenに加算
+                if p_aligned_t_ids and t_id in p_aligned_t_ids:
+                    filtered_logits[t_id] += 15.0
+
+                # 終了tokenに加算
                 if state == FSMState.DONE:
                     filtered_logits[t_id] += 100.0
-            # 許可tokenがない時に'!'の出力を防止
+
+            # 許可したtoken_idがない時、暴走防止
             if not valid_token_ids:
                 return logits
 

@@ -5,7 +5,7 @@ from typing import Any
 
 from src.llm_client import LLMClient
 from src.tokenizer import Tokenizer
-from src.constraints import ConstraintFilter
+from src.constraints.filter import ConstraintFilter
 
 
 class EngineError(Exception):

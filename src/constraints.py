@@ -666,17 +666,19 @@ class ConstraintFilter:
                         # "parameters": {"type": "string"}の時
                         if param_type == "string":
                             # 生成中の文字列がプロンプト中の引用符と一致
-                            is_exact_match = False
+                            # is_exact_match = False
                             # 生成中の文字列がプロンプトの引用符のprefix
-                            is_prefix_of_phrase = False
+                            # is_prefix_of_phrase = False
                             for phrase in getattr(self, "_quoted_phrases", []):
                                 if current_string == phrase:
-                                    is_exact_match = True
+                                    # is_exact_match = True
+                                    pass
                                 elif phrase.startswith(
                                     current_string) and (
                                         current_string != phrase) and (
                                         current_string != ""):
-                                    is_prefix_of_phrase = True
+                                    pass
+                                    # is_prefix_of_phrase = True
 
                             if getattr(self, "_raw_user_prompt", ""):
                                 # 生成中の文字列がプロンプトと合致

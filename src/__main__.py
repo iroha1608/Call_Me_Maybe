@@ -70,10 +70,10 @@ def _build_prompt(
         'fn_add_numbers': [(
                 'What is the sum of 10 and 5?',
                 '{"name": "fn_add_numbers", '
-                '"parameters": {"a": 10.0, "b": 5.0}}'),
+                '"parameters": {"a": 10, "b": 5}}'),
             ('Add 42 and 8',
                 '{"name": "fn_add_numbers", '
-                '"parameters": {"a": 42.0, "b": 8.0}}')
+                '"parameters": {"a": 42, "b": 8}}')
         ],
         'fn_greet': [(
             'Greet emily',
@@ -94,8 +94,8 @@ def _build_prompt(
         'fn_get_square_root': [(
             'What is the square root of 9?',
             '{"name": "fn_get_square_root", '
-            '"parameters": {"a": "9.0"}}'),
-            ('Calculate the square root of 144',
+            '"parameters": {"a": "9"}}'),
+            ('Calculate the square root of 144.0',
                 '{"name": "fn_get_square_root", '
                 '"parameters": {"a": "144.0"}}')
         ],
@@ -106,18 +106,34 @@ def _build_prompt(
             '"source_string": "I have 2 apples", '
             '"regex": "\\\\d+", '
             '"replacement": "NUMBERS"}}'),
-            ('Replace all vowels in "Testing 123" with asterisks',
+            ('Replace all vowels in "Testing 123 is important" with asterisks',
                 '{"name": "fn_substitute_string_with_regex", '
                 '"parameters": {'
-                '"source_string": "Testing 123", '
+                '"source_string": "Testing 123 is important", '
                 '"regex": "[aeiouAEIOU]", '
                 '"replacement": "*"}}'),
-            ('Substitute the word "apple" with "orange" in "an apple a day"',
+            ('Substitute "apple" with "orange" in '
+             '"I ate an apple and another apple"',
                 '{"name": "fn_substitute_string_with_regex", '
                 '"parameters": {'
-                '"source_string": "an apple a day", '
+                '"source_string": "I ate an apple and another apple", '
                 '"regex": "apple", '
-                '"replacement": "orange"}}')
+                '"replacement": "orange"}}'),
+            ('Change the word "sad" to "happy" in '
+             '"The boy was sad because his toy broke"',
+                '{"name": "fn_substitute_string_with_regex", '
+                '"parameters": {'
+                '"source_string": "The boy was sad because his toy broke", '
+                '"regex": "sad", '
+                '"replacement": "happy"}}'),
+            ('Replace the letter "s" with "z" in '
+             '"This is a very long sentence that should not be cut short."',
+                '{"name": "fn_substitute_string_with_regex", '
+                '"parameters": {'
+                '"source_string": "This is a very long sentence '
+                'that should not be cut short.", '
+                '"regex": "s", '
+                '"replacement": "z"}}')
         ]
     }
 
@@ -142,10 +158,14 @@ def _build_prompt(
     # Main Prompt
     prompt = (
         "<|im_start|>system\n"
-        "You are a helpful data extraction assistant.\n"
-        "CRITICAL RULE: "
-        "You MUST copy the exact words and "
-        "capitalization from the user's input.\n"
+        "You are a strict data extraction assistant.\n"
+        "CRITICAL RULES:\n"
+        "1. Exxtract values exactly based on the function's arguments.\n"
+        "2. When an argument requires a full sentence or target text, "
+        "DO NOT truncate it. Copy the entire string exactly.\n"
+        "3. When an argument requires a patten\rn, rule, or specific target, "
+        "output the exact word or generate standard formats "
+        "(e.g., standard Regex like \\d+).\n"
         "Available functions:\n"
         f"{markdown_schema}"
         "<|im_end|>\n"
@@ -160,18 +180,15 @@ def _build_prompt(
     # さらに関連度の高い1例を取得
     if len(fn_examples) > 1:
         prompt_words = set(re.findall(r'[a-zA-Z0-9]+', user_prompt.lower()))
-        best_ex = fn_examples[0]
-        best_score = -1.0
+        scored_examples = []
         for ex_u, ex_a in fn_examples:
             ex_words = set(re.findall(r'[a-zA-Z0-9]+', ex_u.lower()))
             intersection = prompt_words & ex_words
-
             union = prompt_words | ex_words
             score = len(intersection) / len(union) if union else 0.0
-            if score > best_score:
-                best_score = score
-                best_ex = (ex_u, ex_a)
-        fn_examples = [best_ex]
+            scored_examples.append((score, (ex_u, ex_a)))
+        scored_examples.sort(key=lambda x: x[0], reverse=True)
+        fn_examples = [ex for score, ex in scored_examples[:2]]
 
     # 関数ごとの具体例を注入
     for ex_u, ex_a in fn_examples:

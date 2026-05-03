@@ -158,12 +158,14 @@ def _build_prompt(
     # Main Prompt
     prompt = (
         "<|im_start|>system\n"
-        "You are a strict data extraction assistant.\n"
+        "You are a strict AI assistant designed for function calling.\n"
+        "Your task is to analyze the user's prompt "
+        "and generate j JSON object to call the function.\n\n"
         "CRITICAL RULES:\n"
-        "1. Exxtract values exactly based on the function's arguments.\n"
+        "1. Extract values exactly based on the function's arguments.\n"
         "2. When an argument requires a full sentence or target text, "
         "DO NOT truncate it. Copy the entire string exactly.\n"
-        "3. When an argument requires a patten\rn, rule, or specific target, "
+        "3. When an argument requires a pattern, rule, or specific target, "
         "output the exact word or generate standard formats "
         "(e.g., standard Regex like \\d+).\n"
         "Available functions:\n"
@@ -191,10 +193,10 @@ def _build_prompt(
         fn_examples = [ex for score, ex in scored_examples[:2]]
 
     # 関数ごとの具体例を注入
-    for ex_u, ex_a in fn_examples:
-        prompt += f"<|im_start|>user\n{ex_u}\n<|im_end|>\n"
-        prompt += f"<|im_start|>assistant\n{ex_a}\n<|im_end|>\n"
-        print(f"DEBUG: user='{ex_u}'\nassist='{ex_a}'")
+    # for ex_u, ex_a in fn_examples:
+        # prompt += f"<|im_start|>user\n{ex_u}\n<|im_end|>\n"
+        # prompt += f"<|im_start|>assistant\n{ex_a}\n<|im_end|>\n"
+        # print(f"DEBUG: user='{ex_u}'\nassist='{ex_a}'")
     prompt += f"<|im_start|>user\n{user_prompt}\n<|im_end|>\n"
     prompt += "<|im_start|>assistant\n{\n"
 

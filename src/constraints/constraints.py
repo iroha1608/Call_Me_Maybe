@@ -508,9 +508,52 @@ class ConstraintFilter:
                         # 空白、改行以外のa~Zを弾く
                         if re.search(r'[a-zA-Z]', t_str):
                             continue
+                    # parameters 内部(引数の中身)の時
+                    elif not is_root_level and (
+                            state == FSMState.EXPECT_VALUE) and (
+                            depth == 2):
+                        current_schema = self._get_current_function_schema()
+                        current_param_info = current_schema.get(last_key, {})
+                        param_type = current_param_info.get("type", "string")
+                        val_match = re.search(r':([^:]*)$', current_text)
+                        if val_match:
+                            current_val_str = (
+                                val_match.group(1).strip(' \n\r\tĊ')
+                            )
+                        else:
+                            current_val_str = ""
+                        clean_str = t_str.replace("Ġ", " ").strip(' \n\r\tĊ')
+                        # "parameters": {"type": "string"}の時
+                        if param_type in (
+                                "string", "str", "String", "Str"
+                                ):
+                            if '"' in t_str or not clean_str:
+                                clean_valid_ids.add(t_id)
+                        # "parameters": {"type": "number"}の時
+                        elif param_type in (
+                                "number", "num", "Number", "Num"
+                                ):
+                            print("parametesのtypeはnumberです！")
+                            allowed_num = allowed_chars - {"t", "f", "n", '"'}
+                            if clean_str not in allowed_num:
+                                continue
+                            if len(current_val_str) > 15 and not (
+                                    any(c in t_str for c in ".}")):
+                                continue
+                            clean_valid_ids.add(t_id)
+                        # "parameters": {"type": "boolean"}の時
+                        elif param_type in (
+                                "boolean", "bool", "Boolean", "Bool"
+                                ):
+                            if '"' in t_str:
+                                continue
+                            clean_valid_ids.add(t_id)
+                        else:
+                            clean_valid_ids.add(t_id)
+
                     clean_valid_ids.add(t_id)
 
-                # 1-2. cleanにしたtoken_idのみ許可
+                # 1-2. cleanにした構文文字のtoken_idのみ許可
                 valid_token_ids = clean_valid_ids
 
                 # 3. DONEに到達時、eos_tokenの確率を引き上げ
@@ -664,7 +707,9 @@ class ConstraintFilter:
                         new_str = current_string + clean_str
 
                         # "parameters": {"type": "string"}の時
-                        if param_type == "string":
+                        if param_type in (
+                                "string", "str", "String", "Str"
+                                ):
                             # 生成中の文字列がプロンプト中の引用符と一致
                             # is_exact_match = False
                             # 生成中の文字列がプロンプトの引用符のprefix
@@ -712,12 +757,16 @@ class ConstraintFilter:
                                 valid_token_ids.add(t_id)
 
                         # "parameters": {"type": "number"}の時
-                        elif param_type == "number":
+                        elif param_type in (
+                                "number", "num", "Number", "Num"
+                                ):
                             if all(c in '0123456789.-+eE"'
                                         for c in clean_str.strip()):
                                 valid_token_ids.add(t_id)
                         # "parameters": {"type": "boolean"}の時
-                        elif param_type == "boolean":
+                        elif param_type in (
+                                "boolean", "bool", "Boolean", "Bool"
+                                ):
                             if any(("true".startswith(new_str) or (
                                 "false".startswith(new_str)) or (
                                     new_str == "true") or (

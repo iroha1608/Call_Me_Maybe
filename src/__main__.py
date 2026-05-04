@@ -68,9 +68,9 @@ def _build_prompt(
     # 正規表現、引数のマッピング規則の学習
     examples: dict[str, list[Any]] = {
         'fn_add_numbers': [(
-            'Add 42 and 8',
+            'Add 3 and 5',
             '{"name": "fn_add_numbers", '
-            '"parameters": {"a": 42, "b": 8}}')
+            '"parameters": {"a": 3, "b": 5}}')
         ],
         'fn_greet': [(
             'Say hello to captain',
@@ -149,20 +149,46 @@ def _build_prompt(
     # Main Prompt
     prompt = (
         "<|im_start|>system\n"
-        "You are a strict AI assistant designed for function calling.\n"
-        "Your task is to analyze the user's prompt "
-        "and generate JSON object to call the function.\n\n"
-        "CRITICAL RULES:\n"
-        "1. Extract values exactly based on the function's arguments.\n"
-        "2. When an argument requires a full sentence or target text, "
-        "DO NOT truncate it. Copy the entire string exactly.\n"
-        "3. When an argument requires a pattern, rule, or specific target, "
-        "output the exact word or generate standard formats "
-        "(e.g., standard Regex like \\d+).\n"
+        "You are a strict Sata Extraction Engine.\n"
+        "Your ONLY role is to act as a copy-and-paste tool between "
+        "the user's text and the JSON parameters.\n\n"
+        "[Execution Steps]\n"
+        "Step 1 (Read): Read the available functions and "
+        "the user's input text.\n"
+        "Step 2 (Select): Select the correnct function and read its required "
+        "parameters and types"
+        "Step 3 (Extract): Find the exact information in the user's text "
+        "that matches each parameter.\n"
+        "Step 4 (Copy): Copy the extracted information directly "
+        "into the JSON format.\n\n"
+        "[Extraction Rules]\n"
+        "- Numbers: Extract exact numbers from the text. "
+        "Never invent. calculate, or output default numbers like 0 or -1.\n"
+        "- Words/Sentences: Copy the target text EXACTLY. "
+        "Do not summarize or truncate.\n"
+        "- Patterns/Symbols: If asked to replace with a symbol "
+        "(e.g., 'asterisks'), output the actual symbol (e.g, '*'.) "
+        "If a regex pattern is needed, "
+        "output the standard regex (e.g., \\d+).\n\n"
         "Available functions:\n"
         f"{markdown_schema}"
         "<|im_end|>\n"
     )
+        # "<|im_start|>system\n"
+        # "You are a strict data extraction engine.\n"
+        # "Your ONLY job to identify the correct function and copy the exact "
+        # "values from the user's input into the parameters.\n"
+        # "CRITICAL RULES:\n"
+        # "1. NO HALLUCINATION: You MUST ONLY extract numbers and words "
+        # "that are explictly written in the user's prompt. "
+        # "NEVER invent, calculate, or use default numbers like 0 or -1.\n"
+        # "2. FULL EXTRACTION: When a parameter requires a sentence or phrase, "
+        # "copy the entire string exactly without truncation.\n"
+        # "3. PATTERNS: When a parameter requires a rule or pattern, output "
+        # "the exact target word or a standard Regex (e.g., \\d+).\n"
+        # "Available functions:\n"
+        # f"{markdown_schema}"
+        # "<|im_end|>\n"
     # 最も関連性の高い関数の具体例を抽出
     top_fn_name = _get_attr(top_functions[0], "name", "")
     no_data_text = [
@@ -181,7 +207,7 @@ def _build_prompt(
             score = len(intersection) / len(union) if union else 0.0
             scored_examples.append((score, (ex_u, ex_a)))
         scored_examples.sort(key=lambda x: x[0], reverse=True)
-        fn_examples = [ex for score, ex in scored_examples[:2]]
+        fn_examples = [ex for score, ex in scored_examples[:1]]
 
     # 関数ごとの具体例を注入
     # for ex_u, ex_a in fn_examples:

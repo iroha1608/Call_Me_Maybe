@@ -259,17 +259,17 @@ class ConstraintFilter:
                     if '"' in t_str and clean_str:
                         continue
                     if not current_val_str:
-                        allowed_num = allowed_chars - {".", "e", 'E'}
+                        allowed_num = allowed_num - {".", "e", 'E'}
                     if current_val_str and (
                             not current_val_str.endswith(('e', 'E'))):
-                        allowed_num = allowed_chars - {"-"}
+                        allowed_num = allowed_num - {"-"}
                     if '.' in current_val_str or (
                             'e' in current_val_str.lower()):
-                        allowed_num = allowed_chars - {"."}
+                        allowed_num = allowed_num - {"."}
                     if 'e' in current_val_str.lower() or (
                             current_val_str and (
                                 not current_val_str[-1].isdigit())):
-                        allowed_num = allowed_chars - {"e", "E"}
+                        allowed_num = allowed_num - {"e", "E"}
                     if current_val_str in ("0", "-0"):
                         allowed_num = allowed_num - set("0123456789")
                     if clean_str:
@@ -277,13 +277,13 @@ class ConstraintFilter:
                         temp_allowed = set(allowed_num)
                         for c in clean_str:
                             if c not in temp_allowed:
-                                is_valid_token = True
+                                is_valid_token = False
                                 break
                             if c == ".":
                                 temp_allowed = temp_allowed - {"."}
-                            if c == ("e", "E"):
+                            if c in ("e", "E"):
                                 temp_allowed = temp_allowed - {"e", "E", "."}
-                            if c == ("-"):
+                            if c in ("-"):
                                 temp_allowed = temp_allowed - {"-"}
                         if not is_valid_token:
                             continue

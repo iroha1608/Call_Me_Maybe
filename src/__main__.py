@@ -68,20 +68,14 @@ def _build_prompt(
     # 正規表現、引数のマッピング規則の学習
     examples: dict[str, list[Any]] = {
         'fn_add_numbers': [(
-                'What is the sum of 10 and 5?',
-                '{"name": "fn_add_numbers", '
-                '"parameters": {"a": 10, "b": 5}}'),
-            ('Add 42 and 8',
-                '{"name": "fn_add_numbers", '
-                '"parameters": {"a": 42, "b": 8}}')
+            'Add 42 and 8',
+            '{"name": "fn_add_numbers", '
+            '"parameters": {"a": 42, "b": 8}}')
         ],
         'fn_greet': [(
-            'Greet emily',
+            'Say hello to captain',
             '{"name": "fn_greet", '
-            '"parameters": {"name": "emily"}}'),
-            ('Say hello to captain',
-                '{"name": "fn_greet", '
-                '"parameters": {"name": "captain"}}')
+            '"parameters": {"name": "captain"}}')
         ],
         'fn_reverse_string': [(
             'Reverse the string \'apple\'',
@@ -94,10 +88,7 @@ def _build_prompt(
         'fn_get_square_root': [(
             'What is the square root of 9?',
             '{"name": "fn_get_square_root", '
-            '"parameters": {"a": "9"}}'),
-            ('Calculate the square root of 144.0',
-                '{"name": "fn_get_square_root", '
-                '"parameters": {"a": "144.0"}}')
+            '"parameters": {"a": "9"}}')
         ],
         'fn_substitute_string_with_regex': [(
             'Replace all numbers in "I have 2 apples" with NUMBERS',
@@ -106,10 +97,10 @@ def _build_prompt(
             '"source_string": "I have 2 apples", '
             '"regex": "\\\\d+", '
             '"replacement": "NUMBERS"}}'),
-            ('Replace all vowels in "Testing 123 is important" with asterisks',
+            ('Replace all vowels in "Testing 123" with asterisks',
                 '{"name": "fn_substitute_string_with_regex", '
                 '"parameters": {'
-                '"source_string": "Testing 123 is important", '
+                '"source_string": "Testing 123", '
                 '"regex": "[aeiouAEIOU]", '
                 '"replacement": "*"}}'),
             ('Substitute "apple" with "orange" in '
@@ -160,7 +151,7 @@ def _build_prompt(
         "<|im_start|>system\n"
         "You are a strict AI assistant designed for function calling.\n"
         "Your task is to analyze the user's prompt "
-        "and generate j JSON object to call the function.\n\n"
+        "and generate JSON object to call the function.\n\n"
         "CRITICAL RULES:\n"
         "1. Extract values exactly based on the function's arguments.\n"
         "2. When an argument requires a full sentence or target text, "

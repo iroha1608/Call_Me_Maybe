@@ -15,20 +15,14 @@ class FSMState(str, Enum):
 @dataclass(frozen=True)
 class LoopState:
     """文字単位のパースループを回すための内部状態"""
-    # 現在の文字列
     current_string: str = ""
-    # 0=開始か終了、1=root、2=引数の中身
     depth:  int = 0
-    # '"'のあと、文字列内
     in_string: bool = False
-    # valueの入力中
     is_value_context: bool = False
-    # '\'のあと、エスケープ後
     escape: bool = False
-    # 最後に出てきた構造文字
     last_structural_char: str = ""
-    # 最後に出たkey
     last_key: str = ""
+    seen_root_keys: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass
@@ -41,6 +35,7 @@ class ParsedContext:
     in_string: bool
     is_value_context: bool
     last_key: str
+    seen_root_keys: frozenset[str]
 
 
 class JSONStateTracker:
@@ -69,7 +64,8 @@ class JSONStateTracker:
                 depth=0,
                 in_string=False,
                 is_value_context=False,
-                last_key=""
+                last_key="",
+                seen_root_keys = frozenset[str]
             )
 
         # 前回の解析結果をキャッシュ、増えた文だけパースする
@@ -121,7 +117,8 @@ class JSONStateTracker:
             depth=ls.depth,
             in_string=ls.in_string,
             is_value_context=ls.is_value_context,
-            last_key=ls.last_key
+            last_key=ls.last_key,
+            seen_root_keys=ls.seen_root_keys
         )
 
     def _run_fsm_loop(self, state: LoopState, chunk: str) -> LoopState:
@@ -134,6 +131,7 @@ class JSONStateTracker:
         is_value_context = state.is_value_context
         current_string = state.current_string
         last_key = state.last_key
+        seen_keys_set = set(state.seen_root_keys)
 
         # 文字列から1文字ずつループ
         for char in chunk:
@@ -185,7 +183,8 @@ class JSONStateTracker:
             is_value_context=is_value_context,
             escape=escape,
             last_structural_char=last_structural_char,
-            last_key=last_key
+            last_key=last_key,
+            seen_root_keys=frozenset(seen_keys_set)
         )
 
     def get_allowed_characters(self, state: FSMState, depth: int) -> set[str]:
@@ -201,7 +200,7 @@ class JSONStateTracker:
             if depth >= 2:
                 return {
                     '"', "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
-                    ".", "e", "E", "t", "f", "n", ",", "}", "]"
+                    ".", "-", "e", "E", "t", "f", "n", ",", "}", "]"
                 }
             return {
                 '"', "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",

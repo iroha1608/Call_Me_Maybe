@@ -492,6 +492,7 @@ class ConstraintFilter:
 
             # current_textを解析
             ctx = self.state_tracker.determine_current_state(current_text)
+            self._seen_root_keys = ctx.seen_root_keys
             clean_text = current_text.strip()
             # parameters内、引数名の出現状況を適宜解析、更新
             param_match = re.search(

@@ -29,6 +29,21 @@ class LLMClient:
                   f"{e}", file=sys.stderr)
             raise LLMClientError("Failed to retrieve logits.") from e
 
+    def encode(self, text: str) -> list[int]:
+        try:
+            encoded_tensor = self._model.encode(text)
+            return cast(list[int], encoded_tensor[0].tolist())
+        except Exception as e:
+            print(f"LLMClientError: Encoding failed.\n{e}", file=sys.stderr)
+            raise LLMClientError("Failed to encode text.") from e
+
+    def decode(self, token_ids: list[int]) -> str:
+        try:
+            return cast(str, self._model.decode(token_ids))
+        except Exception as e:
+            print(f"LLMClientError: Decoding failed.\n{e}", file=sys.stderr)
+            raise LLMClientError("Failed to decode token IDs.") from e
+
     def get_path_to_vocabfile(self) -> str:
         try:
             return cast(str, self._model.get_path_to_vocab_file())

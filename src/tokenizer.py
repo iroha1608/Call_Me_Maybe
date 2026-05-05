@@ -10,6 +10,7 @@ class TokenizerError(Exception):
 class Tokenizer:
 
     def __init__(self, llm_client: LLMClient) -> None:
+        self._llm_client = llm_client
         self._vocab_path = llm_client.get_path_to_vocabfile()
         self._token_to_id: dict[str, int] = {}
         self._id_to_token: dict[int, str] = {}
@@ -32,14 +33,8 @@ class Tokenizer:
             raise TokenizerError("Vocabulary loading failed.") from e
 
     def encode(self, prompt: str) -> list[int]:
-        token_ids: list[int] = []
         try:
-            for char in prompt:
-                if char in self._token_to_id:
-                    token_ids.append(self._token_to_id[char])
-                else:
-                    pass
-            return token_ids
+            return self._llm_client.encode(prompt)
 
         except Exception as e:
             print(f"TokenizerError: Encoding failed."
@@ -48,12 +43,7 @@ class Tokenizer:
 
     def decode(self, token_ids: list[int]) -> str:
         try:
-            tokens: list[str] = []
-            for t_id in token_ids:
-                if t_id in self._id_to_token:
-                    token_str = self._id_to_token[t_id].replace("Ġ", " ")
-                    tokens.append(token_str)
-            return "".join(tokens)
+            return self._llm_client.decode(token_ids)
 
         except Exception as e:
             print(f"TokenizerError: Decoding failed."

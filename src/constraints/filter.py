@@ -36,13 +36,10 @@ class ConstraintFilter:
         self._vocab_items: list[tuple[int, str]] = (
             list(tokenizer._id_to_token.items())
         )
-        # 許可するroot key
-        self._allowed_root_keys: list[str] = ["name", "parameters"]
         # 使用可能関数から名前の一覧を取得
         self._valid_fn_names: list[str] = [
             _get_attr(fn, "name", "") for fn in self._available_functions
         ]
-        self._target_fn_name: str = ""
 
         # Trie木の初期化と全語彙の登録(空間計算量 O(V * 平均長))、一度のみ実行
         self._trie = TokenTrie()
@@ -56,27 +53,41 @@ class ConstraintFilter:
 
     def set_user_prompt(self, user_prompt: str) -> None:
         """
-            推論ループ内でプロンプトごとに呼び出し、
+            1個のプロンプトにつき1回のみ呼び出し。
             標的関数の再計算とFSMの差分キャッシュをリセットする。
         """
         # 最適な関数の取得
-        self._target_fn_name = self._calculate_target_function(user_prompt)
-
+        self._target_fn_name: str = (
+            self._calculate_target_function(user_prompt))
         # 状態トラッカーの初期化、キャッシュのリセット
         self.state_tracker.reset()
-
-        # プロンプトのtokenIDを保存
-        self._prompt_token_ids = set(self._tokenizer.encode(user_prompt))
         # 生プロンプトの保存
         self._raw_user_prompt = user_prompt
-        # 引用符('"', "'")で囲まれたフレーズの保存
+        # プロンプトのtokenIDを保存(未使用)
+        self._prompt_token_ids = set(self._tokenizer.encode(user_prompt))
+        # 引用符('"', "'")で囲まれたフレーズの保存(未使用)
         phrases = re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
         self._quoted_phrases = [m[0] or m[1] for m in phrases]
 
+        # JSON構文の初期状態処理のセットアップ
+        initial_structure = '{\n  "name": "'
+        self._forced_queue: list[int] = (
+            self._tokenizer.encode(initial_structure))
+
+        # 各key情報の初期化、取得
+        self._expected_root_keys: set[str] = {"name", "parameters"}
+        self._seen_root_keys: set[str] = set()
+        self._available_root_keys: list[str] = []
+        self._expected_param_keys: list[str] = (
+            self._get_expected_param_keys(self._target_fn_name))
+        self._seen_param_keys: set[str] = set()
+        self._param_index: int = 0
+
     def _calculate_target_function(self, user_prompt: str) -> str:
         """
+            プロンプトセット時に使用。
             ユーザープロンプトと関数定義間のJaccard係数を計算し、
-            意味論的に最も関連性の高い関数名を利用可能にする
+            意味論的に最も関連性の高い関数名を利用可能にする。
         """
         if not user_prompt:
             return ""
@@ -105,6 +116,29 @@ class ConstraintFilter:
 
         return best_fn
 
+    def _get_expected_param_keys(self, selected_fn: str) -> list[str]:
+        """
+            プロンプトセット時、確定時に使用。
+            選択された関数のparameters一覧を取得
+        """
+        # 使用関数からparametersを取得できた時、
+        # parameters内のkey(変数名)を保存
+        if selected_fn:
+            for fn in self._available_functions:
+                if _get_attr(fn, "name") == selected_fn:
+                    params = _get_attr(fn, "parameters", {})
+                    if isinstance(params, dict):
+                        return list(params.keys())
+        # 関数名が未確定、上記でkey(変数名)が取得できなかった時、
+        # 全関数のkeyからparametersを取得、デッドロック回避
+        all_keys: set[str] = set()
+        for fn in self._available_functions:
+            params = _get_attr(fn, "parameters", {})
+            if isinstance(params, dict):
+                all_keys.update(params.keys())
+
+        return list(all_keys)
+
     def _get_current_function_schema(self) -> dict[str, dict[str, str]]:
         """
             選択された関数(_target_fn_name)の"parameters"を動的に取得。
@@ -123,32 +157,11 @@ class ConstraintFilter:
                     return params
         return {}
 
-    def _get_expected_param_keys(self, selected_fn: str) -> list[str]:
-        """選択された関数のparameters一覧を取得"""
-        # 使用関数からparametersを取得できた時、
-        # parameters内のkey(変数名)を保存
-        if selected_fn:
-            for fn in self._available_functions:
-                if _get_attr(fn, "name") == selected_fn:
-                    params = _get_attr(fn, "parameters", {})
-                    if isinstance(params, dict):
-                        return list(params.keys())
-        # 関数名が未確定、上記でkey(変数名)が取得できなかった時、
-        # 全関数のkeyからparametersを取得、デッドロック回避
-        all_keys: set[str] = set()
-        for fn in self._available_functions:
-            params = _get_attr(fn, "parameters", {})
-            if isinstance(params, dict):
-                all_keys.update(params.keys())
-        return list(all_keys)
-
-    def _get_available_root_keys(
-        self, seen_root_keys: frozenset[str]
-    ) -> list[str]:
+    def _get_available_root_keys(self) -> list[str]:
         """root keyの順番を強制("name"->"parameters")"""
-        if "name" not in seen_root_keys:
+        if "name" not in self._seen_root_keys:
             return ["name"]
-        elif "parameters" not in seen_root_keys:
+        elif "parameters" not in self._seen_root_keys:
             return ["parameters"]
         else:
             return []
@@ -156,9 +169,7 @@ class ConstraintFilter:
     def _apply_schema_constraints(
         self,
         ctx: ParsedContext,
-        allowed_chars: set[str],
-        expected_param_keys: list[str],
-        seen_param_keys: set[str]
+        allowed_chars: set[str]
     ) -> set[str]:
         """進行状況に応じて、許可する文字を上書き"""
         is_root_level = (ctx.depth == 1)
@@ -168,20 +179,20 @@ class ConstraintFilter:
             allowed_chars = allowed_chars - {"]"}
             if is_root_level:
                 # keyが"name"しか出てない時、継続許可、終了禁止
-                if "name" in ctx.seen_root_keys and (
-                        "parameters" not in ctx.seen_root_keys):
+                if "name" in self._seen_root_keys and (
+                        "parameters" not in self._seen_root_keys):
                     allowed_chars = allowed_chars - {"}"}
                     if ctx.state == FSMState.COMMA_OR_END:
                         return {",", " ", "\n", "\t", "\r"}
                 # "name", "parameter"が出た時、継続禁止、終了許可
-                elif "name" in ctx.seen_root_keys and (
-                        "parameters" in ctx.seen_root_keys):
+                elif "name" in self._seen_root_keys and (
+                        "parameters" in self._seen_root_keys):
                     allowed_chars = allowed_chars - {","}
                     if ctx.state == FSMState.COMMA_OR_END:
                         return {"}", " ", "\n", "\t", "\r"}
             elif ctx.depth == 2:
                 # "parameters"のkeyが残ってる時、継続許可、終了禁止
-                if len(seen_param_keys) < len(expected_param_keys):
+                if len(self._seen_param_keys) < len(self._expected_param_keys):
                     allowed_chars = allowed_chars - {"}"}
                     if ctx.state == FSMState.COMMA_OR_END:
                         return {",", " ", "\n", "\t", "\r"}
@@ -198,7 +209,7 @@ class ConstraintFilter:
 
         # 引数のない関数の時->keyの入力禁止、終了許可
         if not is_root_level and ctx.state == FSMState.KEY and ctx.depth == 2:
-            if len(expected_param_keys) == 0:
+            if len(self._expected_param_keys) == 0:
                 return {"}", " ", "\n", "\t", "\r"}
 
         return allowed_chars
@@ -307,19 +318,19 @@ class ConstraintFilter:
         return clean_valid_ids
 
     def _filter_expected_keys(
-        self, ctx: ParsedContext,
-        valid_token_ids: set[int], available_root_keys: list[str],
-        expected_param_keys: list[str], seen_param_keys: set[str]
+        self, ctx: ParsedContext, valid_token_ids: set[int]
     ) -> set[int]:
-        """keyの処理時、スキーマで期待されるkeyの前方一致のみ許可"""
+        """
+            keyの処理時、スキーマで期待されるkeyの前方一致のみ許可。
+        """
         if ctx.state != FSMState.KEY or ctx.depth not in (1, 2):
             return valid_token_ids
 
         # root key(name, parameters)、またはparameters内のkey(変数名)が入る。
         keys_to_check = (
-            available_root_keys
+            self._available_root_keys
             if ctx.depth == 1
-            else list(set(expected_param_keys) - seen_param_keys)
+            else list(set(self._expected_param_keys) - self._seen_param_keys)
         )
         if not keys_to_check:
             return valid_token_ids
@@ -346,7 +357,9 @@ class ConstraintFilter:
     def _filter_target_fn_name(
         self, ctx: ParsedContext, valid_token_ids: set[int]
     ) -> set[int]:
-        """ nameのvalue(関数名)の直前の時"""
+        """
+            nameのvalue(関数名)の直前の時。
+        """
         if not (
             ctx.depth == 1
             and ctx.state == FSMState.VALUE
@@ -383,13 +396,12 @@ class ConstraintFilter:
 
         return filtered
 
-    def _filter_in_string_tokens(
-        self, ctx: ParsedContext, expected_param_keys: list[str],
-        seen_param_keys: set[str], available_root_keys: list[str]
-    ) -> set[int]:
-
+    def _filter_in_string_tokens(self, ctx: ParsedContext) -> set[int]:
+        """
+            文字列のtokenの処理全般。
+        """
         valid_token_ids = set()
-        target_strings = []
+        target_strings: list[str] = []
         is_fn_name_context = False
         param_type = None
 
@@ -397,9 +409,10 @@ class ConstraintFilter:
         if (ctx.depth == 1 or ctx.depth == 2) and not ctx.is_value_context:
             # 2-3-1. root key または最適関数の"parameters"内のkey(引数名)
             target_strings = (
-                available_root_keys
+                self._available_root_keys
                 if ctx.depth == 1
-                else list(set(expected_param_keys) - seen_param_keys)
+                else list(
+                    set(self._expected_param_keys) - self._seen_param_keys)
             )
             if not target_strings:
                 return set()
@@ -440,22 +453,6 @@ class ConstraintFilter:
                 if "\n" in t_str or "\r" in t_str:
                     continue
                 valid_token_ids.add(t_id)
-
-                # 生成中の文字列がプロンプト中の引用符と一致
-                # is_exact_match = False
-                # 生成中の文字列がプロンプトの引用符のprefix
-                # is_prefix_of_phrase = False
-                for phrase in getattr(self, "_quoted_phrases", []):
-                    if ctx.current_string == phrase:
-                        # is_exact_match = True
-                        pass
-                    elif (
-                        phrase.startswith(ctx.current_string)
-                        and (ctx.current_string != phrase)
-                        and (ctx.current_string != "")
-                    ):
-                        pass
-                        # is_prefix_of_phrase = True
                 # Semantic Logit Steering(確率ブースト)
                 if getattr(self, "_raw_user_prompt", ""):
                     # 生成中の文字列がプロンプトと合致
@@ -486,46 +483,72 @@ class ConstraintFilter:
             状態遷移(FSM)アルゴリズム、 プッシュダウンオートマトン(PDA)。
         """
         try:
-            # ソフト制約 "parameter"のvalueかつ引数の中身の時使用
-            self.p_aligned_t_ids: set[int] = set()
+            # --------------- 強制キューによるバイアス ---------------
+            if self._forced_queue:
+                target_id = self._forced_queue.pop(0)
+                filtered_logits = [-math.inf] * len(logits)
+                filtered_logits[target_id] = 100.0
+                return filtered_logits
+
             # current_textを解析
             ctx = self.state_tracker.determine_current_state(current_text)
-            # token全ての確率を-infで初期化(ハルシネーション防止)
-            filtered_logits = [-math.inf] * len(logits)
-            # 現在の状態に合わせて許容する文字を取得
-            allowed_chars = (
-                self.state_tracker.get_allowed_characters(
-                    ctx.state, ctx.depth
-                )
-            )
-
-            # -------------------- 必須keyの処理 start --------------------
-            # 選択された関数名の取得
-            selected_fn = self._target_fn_name
-            name_match = re.search(r'"name"\s*:\s*"([^"]+)"', current_text)
-            if name_match:
-                selected_fn = name_match.group(1)
-
-            # 使用関数からparametersを取得、parameters内のkey(変数名)を保存
-            expected_param_keys = self._get_expected_param_keys(selected_fn)
-            # parametersの出現状況を解析、更新
-            seen_param_keys = set()
+            clean_text = current_text.strip()
+            # parameters内、引数名の出現状況を適宜解析、更新
             param_match = re.search(
                 r'"parameters"\s*:\s*\{(.*)', current_text, re.DOTALL)
             if param_match:
-                seen_param_keys = set(
+                self._seen_param_keys = set(
                     re.findall(r'"([^"]+)"\s*:', param_match.group(1)))
 
+            # -------------------- 必須構文の処理 Start --------------------
+            # 1. 関数名の出力が完了した時 -> 引数までキューに補充
+            if (ctx.depth == 1
+                    and ctx.state == FSMState.COMMA_OR_END
+                    and ctx.last_key == "name"
+                    and clean_text.endswith('"')):
+                # 実際にモデルが選択した関数名に合わせてtarget, param keyを更新
+                name_match = re.search(r'"name"\s*:\s*"([^"]+)"', current_text)
+                if name_match:
+                    self._target_fn_name = name_match.group(1)
+                    self._expected_param_keys = (
+                        self._get_expected_param_keys(self._target_fn_name))
+                if self._expected_param_keys:
+                    first_arg = self._expected_param_keys[0]
+                    inject_str = f',\n  "parameters": {{\n    "{first_arg}": '
+                else:
+                    inject_str = ',\n  "parameters": {{}}\n}}: '
+
+                self._forced_queue = self._tokenizer.encode(inject_str)
+                # 再帰してqueueを消費
+                return self.filter_logits(logits, current_text)
+
+            # 2. 引数の値を出力後まだkeyが残ってる時 -> 次の引数を補充
+            if ctx.depth == 2 and clean_text.endswith(','):
+                if len(self._seen_param_keys) < len(self._expected_param_keys):
+                    self._param_index += 1
+                    next_arg = self._expected_param_keys[self._param_index]
+                    inject_str = f'    "{next_arg}": '
+                    self._forced_queue = self._tokenizer.encode(inject_str)
+                    # 再帰してqueueを消費
+                    return self.filter_logits(logits, current_text)
+
+            # 3. 引数の出力が完了、parametersが閉じられた時 -> "}"を強制
+            if ctx.depth == 1 and clean_text.endswith('}'):
+                self._forced_queue = self._tokenizer.encode('\n}')
+                return self.filter_logits(logits, current_text)
+            # -------------------- 必須構文の処理 End --------------------
+
+            # -------------------- 必須keyの処理 Start --------------------
+            # token全ての確率を-infで初期化(ハルシネーション防止)
+            filtered_logits = [-math.inf] * len(logits)
             # root keyの順番の強制
-            available_root_keys = (
-                self._get_available_root_keys(ctx.seen_root_keys)
+            self._available_root_keys = self._get_available_root_keys()
+            # 現在の状態に合わせて許容する文字を取得
+            allowed_chars = (
+                self.state_tracker.get_allowed_characters(ctx.state, ctx.depth)
             )
             # 状況に応じてallowed_charsを上書き
-            allowed_chars = self._apply_schema_constraints(
-                    ctx, allowed_chars, expected_param_keys, seen_param_keys
-            )
-            # -------------------- 必須keyの処理 end --------------------
-
+            allowed_chars = self._apply_schema_constraints(ctx, allowed_chars)
             # 許可済み制御文字から空白を抜いたもの
             allowed_structural = {c for c in allowed_chars if c.strip()}
             # 現在のtokenを予測するため許可tokenリストをループ前に初期化
@@ -533,8 +556,11 @@ class ConstraintFilter:
             # 空白token(無害)の補充
             if " " in allowed_chars or "\n" in allowed_chars:
                 valid_token_ids.update(self._trie.whitespace_token_ids)
+            # ソフト制約 "parameter"のvalueかつ引数の中身の時使用
+            self.p_aligned_t_ids: set[int] = set()
+            # -------------------- 必須keyの処理 End --------------------
 
-            # ---------- Trie木を用いた 語彙フィルタリング ----------
+            # --------------- 構文文字フィルタリング Start ---------------
             # 1. 構文文字(':', ',', '{}'etc...)の待機時
             if not ctx.in_string:
                 # 1-1. Trieのハッシュマップから許可token_id群を取得
@@ -544,39 +570,24 @@ class ConstraintFilter:
                             self._trie.first_char_index[char]
                         )
                 # 1-2. cleanにした構文文字のtoken_idのみ許可
+                # 1-5, valueがnumberかboolの時
                 valid_token_ids = self._filter_structural_tokens(
                     ctx, valid_token_ids, allowed_chars, current_text
                 )
                 # 1-3. keyのフィルタリング
                 valid_token_ids = self._filter_expected_keys(
-                    ctx, valid_token_ids, available_root_keys,
-                    expected_param_keys, seen_param_keys
-                )
+                    ctx, valid_token_ids)
                 # 1-4. 関数名のフィルタリング
                 valid_token_ids = self._filter_target_fn_name(
                     ctx, valid_token_ids
                 )
-                # 3. DONEに到達時、eos_tokenの確率を引き上げ
-                if ctx.state == FSMState.DONE:
-                    # 既存許可リストをクリア
-                    valid_token_ids = set()
-                    # Engineが停止条件として認めるEOS tokenのみ許可する
-                    eos_id = getattr(self._tokenizer, "eos_token_id", None)
-                    if eos_id is not None:
-                        eos_id = (
-                            eos_id[0] if isinstance(eos_id, list) else eos_id
-                        )
-                        valid_token_ids.add(eos_id)
-                    else:
-                        valid_token_ids.update(self._trie.whitespace_token_ids)
+            # --------------- 構文文字フィルタリング End ---------------
 
             # 2. 文字列内部の処理
             else:
-                valid_token_ids = self._filter_in_string_tokens(
-                    ctx, expected_param_keys, seen_param_keys,
-                    available_root_keys
-                )
+                valid_token_ids = self._filter_in_string_tokens(ctx)
 
+            # ------------------------- 最終調整 -------------------------
             # 許可したtoken_idがない時、暴走防止
             if not valid_token_ids:
                 print("許可tokenなし")
@@ -586,20 +597,20 @@ class ConstraintFilter:
             for t_id in valid_token_ids:
                 filtered_logits[t_id] = logits[t_id]
 
-                # name keyに対する関数のtokenに加算
+                # name keyに対する関数のtoken_idに加算
                 if (ctx.depth == 1
                         and ctx.is_value_context
                         and ctx.last_key == "name"
                         and self._target_fn_name):
                     filtered_logits[t_id] += 10.0
 
-                # prompt一致のtokenに加算
+                # prompt一致の文字列token_idに加算
                 if self.p_aligned_t_ids and t_id in self.p_aligned_t_ids:
                     filtered_logits[t_id] += 15.0
 
-                # 終了tokenに加算
-                if ctx.state == FSMState.DONE:
-                    filtered_logits[t_id] += 100.0
+                # 終了token_idに加算
+                # if ctx.state == FSMState.DONE:
+                    # filtered_logits[t_id] += 100.0
 
             return filtered_logits
 

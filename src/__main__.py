@@ -149,14 +149,14 @@ def _build_prompt(
     # Main Prompt
     prompt = (
         "<|im_start|>system\n"
-        "You are a strict Sata Extraction Engine.\n"
+        "You are a strict Data Extraction Engine.\n"
         "Your ONLY role is to act as a copy-and-paste tool between "
         "the user's text and the JSON parameters.\n\n"
         "[Execution Steps]\n"
         "Step 1 (Read): Read the available functions and "
         "the user's input text.\n"
         "Step 2 (Select): Select the correnct function and read its required "
-        "parameters and types"
+        "parameters and types."
         "Step 3 (Extract): Find the exact information in the user's text "
         "that matches each parameter.\n"
         "Step 4 (Copy): Copy the extracted information directly "
@@ -346,6 +346,7 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
-    except KeyboardInterrupt as e:
-        print(f"KeyboardINterruptError: {e}", file=sys.stderr)
+    except KeyboardInterrupt:
+        print("KeyboardInterruptError: Ctrl + c has been detected."
+                , file=sys.stderr)
         sys.exit(1)

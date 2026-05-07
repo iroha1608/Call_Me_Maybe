@@ -65,7 +65,7 @@ class JSONStateTracker:
                 in_string=False,
                 is_value_context=False,
                 last_key="",
-                seen_root_keys = frozenset[str]
+                seen_root_keys=frozenset()
             )
 
         # 前回の解析結果をキャッシュ、増えた文だけパースする

@@ -6,6 +6,9 @@
     "prompt": "Calculate the astronomical number for 999999999999999999999999999999999999999999999999"
   },
   {
+    "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\"<>?~\n\t👾"
+  },
+  {
     "prompt": "Update profile: set username to true, age to 'twenty-five', is_premium to 100, and delete_reason to 'expired'."
   },
   {

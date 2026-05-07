@@ -273,6 +273,31 @@ class ConstraintFilter:
                     allowed_num = allowed_chars - {"t", "f", "n", '"'}
                     if '"' in t_str and clean_str:
                         continue
+                    raw_prompt = getattr(self, "_raw_user_prompt", "")
+
+                    if "." not in raw_prompt:
+                        allowed_num = allowed_num - {"."}
+                    force_terminate = False
+                    if current_val_str:
+                        # 生成中の数字がプロンプト内に存在するか
+                        is_in_prompt = current_val_str in raw_prompt
+                        fraction_len = (
+                            len(current_val_str.split(".")[1])
+                            if "." in current_val_str
+                            else 0)
+                        # プロンプトに存在しないかつ許容する長さを超えた時
+                        if len(current_val_str) > 15 or fraction_len > 5:
+                            if not is_in_prompt:
+                                force_terminate = True
+                            # 生成中の数字とプロンプト中の数字が合致した時
+                            prompt_numbers = re.findall(r'\d+', raw_prompt)
+                            for p_num in prompt_numbers:
+                                if current_val_str == p_num:
+                                    force_terminate = True
+
+                    if force_terminate:
+                        allowed_num = allowed_num - set("0123456789.eE+")
+
                     if not current_val_str:
                         allowed_num = allowed_num - {".", "e", 'E'}
                     if current_val_str and (
@@ -375,6 +400,28 @@ class ConstraintFilter:
                 # 文字列内の改行等JSONが壊れるtokenをブロック
                 if "\n" in t_str or "\r" in t_str:
                     continue
+
+                if '"' in clean_str:
+                    if '\\"' in clean_str or ctx.current_string.endswith('\\'):
+                        valid_token_ids.add(t_id)
+                        continue
+                    current_val = ctx.current_string
+                    unescaped_val = (
+                        current_val.replace('\\"', '"').replace('\\\\', '\\'))
+                    raw_prompt = getattr(self, "_raw_user_prompt", "")
+
+                    if (len(unescaped_val) > 150
+                            and unescaped_val not in raw_prompt):
+                        if clean_str.strip() == '"':
+                            valid_token_ids.add(t_id)
+                        continue
+
+                    # 出力中の文字列がプロンプトの中にある時
+                    # if unescaped_val in raw_prompt:
+                        # print("デバッグ1\n")
+                        # continue
+                    valid_token_ids.add(t_id)
+                    continue
                 valid_token_ids.add(t_id)
 
             # 想定外のコンテキスト 基本入らないケース
@@ -399,7 +446,7 @@ class ConstraintFilter:
 
             # current_textを解析
             ctx = self.state_tracker.determine_current_state(current_text)
-            self._seen_root_keys = ctx.seen_root_keys
+            self._seen_root_keys = set(ctx.seen_root_keys)
             clean_text = current_text.strip()
             # parameters内、引数名の出現状況を適宜解析、更新
             param_match = re.search(
@@ -411,6 +458,7 @@ class ConstraintFilter:
             # -------------------- 必須構文の処理 --------------------
             # 1. 関数名の出力が完了した時 -> 引数までキューに補充
             if (ctx.depth == 1
+                    and not ctx.in_string
                     and ctx.state == FSMState.COMMA_OR_END
                     and ctx.last_key == "name"
                     and clean_text.endswith('"')):
@@ -431,7 +479,9 @@ class ConstraintFilter:
                 return self.filter_logits(logits, current_text)
 
             # 2. 引数の値を出力後まだkeyが残ってる時 -> 次の引数を補充
-            if ctx.depth == 2 and clean_text.endswith(','):
+            if (ctx.depth == 2
+                    and not ctx.in_string
+                    and clean_text.endswith(',')):
                 if len(self._seen_param_keys) < len(self._expected_param_keys):
                     self._param_index += 1
                     next_arg = self._expected_param_keys[self._param_index]
@@ -440,8 +490,31 @@ class ConstraintFilter:
                     # 再帰してqueueを消費
                     return self.filter_logits(logits, current_text)
 
+            # 3. エスケープの自動補完
+            # if ctx.in_string and ctx.depth == 2:
+                # current_val = ctx.current_string
+                # unescaped_val = (
+                    # current_val.replace('\\"', '"').replace('\\\\', '\\'))
+                # raw_prompt = getattr(self, "_raw_user_prompt", "")
+                # # 出力中の文字列がプロンプトの中にある時
+                # if unescaped_val and unescaped_val in raw_prompt:
+                    # print("デバッグ1\n")
+                    # idx = raw_prompt.find(unescaped_val)
+                    # end_idx = idx + len(unescaped_val)
+                    # if end_idx < len(raw_prompt):
+                        # print("デバッグ2\n")
+                        # next_char = raw_prompt[end_idx]
+                        # # *** まだ続くのに"が来た時(\が来た時も) ***
+                        # if next_char in ('"', "\\"):
+                            # print("デバッグ3\n")
+                            # self._forced_queue = (
+                                # self._tokenizer.encode('\\' + next_char))
+                            # return self.filter_logits(logits, current_text)
+
             # 3. 引数の出力が完了、parametersが閉じられた時 -> "}"を強制
-            if ctx.depth == 1 and clean_text.endswith('}'):
+            if (ctx.depth == 1
+                    and not ctx.in_string
+                    and clean_text.endswith('}')):
                 self._forced_queue = self._tokenizer.encode('\n}')
                 return self.filter_logits(logits, current_text)
 

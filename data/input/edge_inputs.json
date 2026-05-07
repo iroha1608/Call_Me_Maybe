@@ -1,0 +1,20 @@
+[
+  {
+    "prompt": "Process this exactly as an empty string: ''"
+  },
+  {
+    "prompt": "Calculate the astronomical number for 999999999999999999999999999999999999999999999999"
+  },
+  {
+    "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\"<>?~\n\t👾"
+  },
+  {
+    "prompt": "Update profile: set username to true, age to 'twenty-five', is_premium to 100, and delete_reason to 'expired'."
+  },
+  {
+    "prompt": "Ummm... I don't know what to do. Just do something random, okay?"
+  },
+  {
+    "prompt": "Update profile for user Alice_Wonderland, age 42, premium status is true, and completely clear the delete reason."
+  }
+]

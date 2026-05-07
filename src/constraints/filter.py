@@ -19,10 +19,10 @@ def _get_attr(obj: Any, key: str, default: Any = "") -> Any:
 
 class ConstraintFilter:
     """
-    プッシュダウンオートマトン(PDA)
-    制約付きデコーディングを行う。
-    LLMが出力した確率分布(Logits)を操作、
-    Json構文、スキーマに違反するtokenをフィルタリングするクラス。
+        プッシュダウンオートマトン(PDA)
+        制約付きデコーディングを行う。
+        LLMが出力した確率分布(Logits)を操作、
+        Json構文、スキーマに違反するtokenをフィルタリングするクラス。
     """
     def __init__(
         self,
@@ -65,9 +65,6 @@ class ConstraintFilter:
         self._raw_user_prompt = user_prompt
         # プロンプトのtokenIDを保存(未使用)
         self._prompt_token_ids = set(self._tokenizer.encode(user_prompt))
-        # 引用符('"', "'")で囲まれたフレーズの保存(未使用)
-        phrases = re.findall(r'"([^"]+)"|\'([^\']+)\'', user_prompt)
-        self._quoted_phrases = [m[0] or m[1] for m in phrases]
 
         # JSON構文の初期状態処理のセットアップ
         initial_structure = '{\n  "name": "'
@@ -158,7 +155,10 @@ class ConstraintFilter:
         return {}
 
     def _get_available_root_keys(self) -> list[str]:
-        """root keyの順番を強制("name"->"parameters")"""
+        """
+            root keyの順番を強制("name"->"parameters")。
+            現在強制キューで管理。
+        """
         if "name" not in self._seen_root_keys:
             return ["name"]
         elif "parameters" not in self._seen_root_keys:
@@ -171,7 +171,10 @@ class ConstraintFilter:
         ctx: ParsedContext,
         allowed_chars: set[str]
     ) -> set[str]:
-        """進行状況に応じて、許可する文字を上書き"""
+        """
+            進行状況に応じて、許可する文字を上書き。
+            現在複数引数の時に継続許可、禁止で使用。
+        """
         is_root_level = (ctx.depth == 1)
 
         # root, keyを一つ生成後、"name", "parameters"の両方を強制
@@ -191,7 +194,7 @@ class ConstraintFilter:
                     if ctx.state == FSMState.COMMA_OR_END:
                         return {"}", " ", "\n", "\t", "\r"}
             elif ctx.depth == 2:
-                # "parameters"のkeyが残ってる時、継続許可、終了禁止
+                # 引数のkeyが残ってる時、継続許可、終了禁止
                 if len(self._seen_param_keys) < len(self._expected_param_keys):
                     allowed_chars = allowed_chars - {"}"}
                     if ctx.state == FSMState.COMMA_OR_END:
@@ -219,8 +222,9 @@ class ConstraintFilter:
         valid_token_ids: set[int], allowed_chars: set[str], current_text: str
     ) -> set[int]:
         """
-            文字列外の時、不要なtoken排除、型制約の適用
-            必要な構文文字のtoken_idのみ許可する
+            文字列外の時、不要なtoken排除、型制約の適用。
+            必要な構文文字のtoken_idのみ許可する。
+            現在メインは数字の出力。
         """
         # 許可されていない構造文字セット
         dis_allowed_structural = (
@@ -298,10 +302,6 @@ class ConstraintFilter:
                                 temp_allowed = temp_allowed - {"-"}
                         if not is_valid_token:
                             continue
-                    # 無限ループ防止
-                    if len(current_val_str) > 15 and (
-                            not any(c in t_str for c in ".}")):
-                        continue
 
                 # "parameters": {"type": "boolean"}の時
                 elif param_type in ("boolean", "bool"):
@@ -317,88 +317,10 @@ class ConstraintFilter:
 
         return clean_valid_ids
 
-    def _filter_expected_keys(
-        self, ctx: ParsedContext, valid_token_ids: set[int]
-    ) -> set[int]:
-        """
-            keyの処理時、スキーマで期待されるkeyの前方一致のみ許可。
-        """
-        if ctx.state != FSMState.KEY or ctx.depth not in (1, 2):
-            return valid_token_ids
-
-        # root key(name, parameters)、またはparameters内のkey(変数名)が入る。
-        keys_to_check = (
-            self._available_root_keys
-            if ctx.depth == 1
-            else list(set(self._expected_param_keys) - self._seen_param_keys)
-        )
-        if not keys_to_check:
-            return valid_token_ids
-
-        filtered = set()
-        for t_id in valid_token_ids:
-            t_str = (
-                self._tokenizer._id_to_token.get(t_id, "").replace("Ġ", " ")
-            )
-            if '"' in t_str:
-                content = t_str[t_str.find('"') + 1:]
-                # '"'の開始、または期待されるkey名の前方、完全一致のみ許可
-                if not content or (
-                        any((k.startswith(content)) or (content == k + '"')
-                            for k in keys_to_check)):
-                    filtered.add(t_id)
-            else:
-                # 引用符を含まない純粋な空白tokenのみ許可
-                if not t_str.strip(' \n\r\tĊ'):
-                    filtered.add(t_id)
-
-        return filtered
-
-    def _filter_target_fn_name(
-        self, ctx: ParsedContext, valid_token_ids: set[int]
-    ) -> set[int]:
-        """
-            nameのvalue(関数名)の直前の時。
-        """
-        if not (
-            ctx.depth == 1
-            and ctx.state == FSMState.VALUE
-            and ctx.last_key == "name"
-        ):
-            return valid_token_ids
-
-        filtered = set()
-        for t_id in valid_token_ids:
-            t_str = (
-                self._tokenizer._id_to_token.get(t_id, "").replace("Ġ", " ")
-            )
-            if '"' in t_str:
-                content = t_str[t_str.find('"') + 1:]
-                if not content:
-                    filtered.add(t_id)
-                elif self._target_fn_name:
-                    # targetの前方、完全一致を許可
-                    if (
-                        self._target_fn_name.startswith(content)
-                        or content == self._target_fn_name + '"'
-                    ):
-                        filtered.add(t_id)
-                # targetが未定の時全関数名を許可
-                else:
-                    if (
-                        any(fn.startswith(content) or content == fn + '"'
-                            for fn in self._valid_fn_names)):
-                        filtered.add(t_id)
-            else:
-                # 引用符を含まない時、純粋な空白tokenのみ許可
-                if not t_str.strip(' \n\r\tĊ'):
-                    filtered.add(t_id)
-
-        return filtered
-
     def _filter_in_string_tokens(self, ctx: ParsedContext) -> set[int]:
         """
-            文字列のtokenの処理全般。
+            文字列内の時、不要なtoken排除。
+            関数名、引数の中身がstringの時のメイン処理。
         """
         valid_token_ids = set()
         target_strings: list[str] = []
@@ -448,27 +370,12 @@ class ConstraintFilter:
                         for k in target_strings)):
                     valid_token_ids.add(t_id)
 
-            # "parameters": {"type": "string"}の時
+            # 2-5-2. "parameters": {"type": "string"}の時
             elif param_type in ("string", "str", "String", "Str"):
+                # 文字列内の改行等JSONが壊れるtokenをブロック
                 if "\n" in t_str or "\r" in t_str:
                     continue
                 valid_token_ids.add(t_id)
-                # Semantic Logit Steering(確率ブースト)
-                if getattr(self, "_raw_user_prompt", ""):
-                    # 生成中の文字列がプロンプトと合致
-                    if new_str in self._raw_user_prompt:
-                        self.p_aligned_t_ids.add(t_id)
-                    elif new_str.endswith('"'):
-                        cont = new_str[:-1]
-                        if cont in self._raw_user_prompt:
-                            idx = self._raw_user_prompt.find(cont)
-                            if idx != -1:
-                                end_idx = idx + len(cont)
-                                if end_idx == len(self._raw_user_prompt) or (
-                                        not (self._raw_user_prompt[end_idx])
-                                        .isalnum()
-                                        ):
-                                    self.p_aligned_t_ids.add(t_id)
 
             # 想定外のコンテキスト 基本入らないケース
             else:
@@ -501,7 +408,7 @@ class ConstraintFilter:
                 self._seen_param_keys = set(
                     re.findall(r'"([^"]+)"\s*:', param_match.group(1)))
 
-            # -------------------- 必須構文の処理 Start --------------------
+            # -------------------- 必須構文の処理 --------------------
             # 1. 関数名の出力が完了した時 -> 引数までキューに補充
             if (ctx.depth == 1
                     and ctx.state == FSMState.COMMA_OR_END
@@ -537,10 +444,9 @@ class ConstraintFilter:
             if ctx.depth == 1 and clean_text.endswith('}'):
                 self._forced_queue = self._tokenizer.encode('\n}')
                 return self.filter_logits(logits, current_text)
-            # -------------------- 必須構文の処理 End --------------------
 
-            # -------------------- 必須keyの処理 Start --------------------
-            # token全ての確率を-infで初期化(ハルシネーション防止)
+            # -------------------- 必須keyの処理 --------------------
+            # token全ての確率を-infで初期化
             filtered_logits = [-math.inf] * len(logits)
             # root keyの順番の強制
             self._available_root_keys = self._get_available_root_keys()
@@ -548,75 +454,56 @@ class ConstraintFilter:
             allowed_chars = (
                 self.state_tracker.get_allowed_characters(ctx.state, ctx.depth)
             )
-            # 状況に応じてallowed_charsを上書き
+            # 状況に応じてallowed_charsを上書き(主に複数引数の処理)
             allowed_chars = self._apply_schema_constraints(ctx, allowed_chars)
             # 許可済み制御文字から空白を抜いたもの
             allowed_structural = {c for c in allowed_chars if c.strip()}
             # 現在のtokenを予測するため許可tokenリストをループ前に初期化
             valid_token_ids = set()
-            # 空白token(無害)の補充
+            # 空白tokenの補充
             if " " in allowed_chars or "\n" in allowed_chars:
                 valid_token_ids.update(self._trie.whitespace_token_ids)
-            # ソフト制約 "parameter"のvalueかつ引数の中身の時使用
-            self.p_aligned_t_ids: set[int] = set()
-            # -------------------- 必須keyの処理 End --------------------
 
-            # --------------- 構文文字フィルタリング Start ---------------
-            # 1. 構文文字(':', ',', '{}'etc...)の待機時
+            # --------------- 構文文字フィルタリング  ---------------
+            # 構文文字('{', '}', ':', ','...)の処理時
             if not ctx.in_string:
-                # 1-1. Trieのハッシュマップから許可token_id群を取得
+                # Trieのハッシュマップから許可token_id群を取得
                 for char in allowed_structural:
                     if char in self._trie.first_char_index:
                         valid_token_ids.update(
                             self._trie.first_char_index[char]
                         )
-                # 1-2. cleanにした構文文字のtoken_idのみ許可
-                # 1-5, valueがnumberかboolの時
+                # 現在の文字列に適した構文文字のtoken_idのみ許可
+                # valueがnumberかboolの時
                 valid_token_ids = self._filter_structural_tokens(
                     ctx, valid_token_ids, allowed_chars, current_text
                 )
-                # 1-3. keyのフィルタリング
-                valid_token_ids = self._filter_expected_keys(
-                    ctx, valid_token_ids)
-                # 1-4. 関数名のフィルタリング
-                valid_token_ids = self._filter_target_fn_name(
-                    ctx, valid_token_ids
-                )
-            # --------------- 構文文字フィルタリング End ---------------
 
-            # 2. 文字列内部の処理
+            # ---------- 文字列内部(関数名、引数の中身)の処理 ----------
             else:
                 valid_token_ids = self._filter_in_string_tokens(ctx)
 
             # ------------------------- 最終調整 -------------------------
-            # 許可したtoken_idがない時、暴走防止
+            # 許可したtoken_idがない時、暴走防止でフォールバック
             if not valid_token_ids:
                 print("許可tokenなし")
                 return logits
 
-            # Logitsの再構築とSemantic Logit Steering
+            # Logitsの再構築
             for t_id in valid_token_ids:
                 filtered_logits[t_id] = logits[t_id]
 
-                # name keyに対する関数のtoken_idに加算
+                # 関数名入力時のtoken_idを強制
                 if (ctx.depth == 1
                         and ctx.is_value_context
                         and ctx.last_key == "name"
                         and self._target_fn_name):
                     filtered_logits[t_id] += 10.0
 
-                # prompt一致の文字列token_idに加算
-                if self.p_aligned_t_ids and t_id in self.p_aligned_t_ids:
-                    filtered_logits[t_id] += 15.0
-
-                # 終了token_idに加算
-                # if ctx.state == FSMState.DONE:
-                    # filtered_logits[t_id] += 100.0
-
             return filtered_logits
 
         except Exception as e:
             print(f"ConstrainFilter: Error during logit filtering. "
                   f"{e}", file=sys.stderr)
-            # パイプラインのクラッシュを防止
+            # パイプラインのクラッシュ防止フォールバック
             return logits

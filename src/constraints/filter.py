@@ -274,23 +274,24 @@ class ConstraintFilter:
                     if '"' in t_str and clean_str:
                         continue
                     raw_prompt = getattr(self, "_raw_user_prompt", "")
-
-                    if "." not in raw_prompt:
-                        allowed_num = allowed_num - {"."}
                     force_terminate = False
+
                     if current_val_str:
                         # 生成中の数字がプロンプト内に存在するか
                         is_in_prompt = current_val_str in raw_prompt
+                        # 小数点がある時、小数点以下の長さを計測
                         fraction_len = (
                             len(current_val_str.split(".")[1])
                             if "." in current_val_str
                             else 0)
-                        # プロンプトに存在しないかつ許容する長さを超えた時
+                        # 出力中の数字がプロンプトに存在しない
+                        # かつ許容する長さを超えた時
                         if len(current_val_str) > 15 or fraction_len > 5:
                             if not is_in_prompt:
                                 force_terminate = True
                             # 生成中の数字とプロンプト中の数字が合致した時
-                            prompt_numbers = re.findall(r'\d+', raw_prompt)
+                            prompt_numbers = (
+                                re.findall(r'\d+(?:\.\d+)?', raw_prompt))
                             for p_num in prompt_numbers:
                                 if current_val_str == p_num:
                                     force_terminate = True
@@ -338,6 +339,16 @@ class ConstraintFilter:
                             any(target.startswith(new_val) or new_val == target
                                 for target in ("true", "false", "null"))):
                             continue
+
+                # "parameters": {"type": "null"}の時
+                elif param_type in ("null", "Null", "NULL"):
+                    if '"' in t_str:
+                        continue
+                    if clean_str:
+                        new_val = current_val_str + clean_str
+                        if not "null".startswith(new_val):
+                            continue
+
             clean_valid_ids.add(t_id)
 
         return clean_valid_ids
@@ -387,6 +398,8 @@ class ConstraintFilter:
         for t_id, t_str in self._vocab_items:
             clean_str = t_str.replace("Ġ", " ")
             new_str = ctx.current_string + clean_str
+            if t_id in (330, 2974, 4884):
+                continue
 
             # 2-5-1. keyまたは関数名の入力中
             if target_strings or is_fn_name_context:
@@ -490,26 +503,18 @@ class ConstraintFilter:
                     # 再帰してqueueを消費
                     return self.filter_logits(logits, current_text)
 
-            # 3. エスケープの自動補完
-            # if ctx.in_string and ctx.depth == 2:
-                # current_val = ctx.current_string
-                # unescaped_val = (
-                    # current_val.replace('\\"', '"').replace('\\\\', '\\'))
-                # raw_prompt = getattr(self, "_raw_user_prompt", "")
-                # # 出力中の文字列がプロンプトの中にある時
-                # if unescaped_val and unescaped_val in raw_prompt:
-                    # print("デバッグ1\n")
-                    # idx = raw_prompt.find(unescaped_val)
-                    # end_idx = idx + len(unescaped_val)
-                    # if end_idx < len(raw_prompt):
-                        # print("デバッグ2\n")
-                        # next_char = raw_prompt[end_idx]
-                        # # *** まだ続くのに"が来た時(\が来た時も) ***
-                        # if next_char in ('"', "\\"):
-                            # print("デバッグ3\n")
-                            # self._forced_queue = (
-                                # self._tokenizer.encode('\\' + next_char))
-                            # return self.filter_logits(logits, current_text)
+            # Ex. 空白tokenが暴走した時
+            if (ctx.state == FSMState.COMMA_OR_END
+                    and current_text.endswith('   ')):
+                if len(self._seen_param_keys) < len(self._expected_param_keys):
+                    self._param_index += 1
+                    next_arg = self._expected_param_keys[self._param_index]
+                    inject_str = f',\n    "{next_arg}": '
+                    self._forced_queue = self._tokenizer.encode(inject_str)
+                    return self.filter_logits(logits, current_text)
+                else:
+                    self._forced_queue = self._tokenizer.encode("\n}")
+                    return self.filter_logits(logits, current_text)
 
             # 3. 引数の出力が完了、parametersが閉じられた時 -> "}"を強制
             if (ctx.depth == 1

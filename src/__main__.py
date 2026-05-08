@@ -57,76 +57,13 @@ def _calculate_jaccard_similarity(
 def _build_prompt(
     user_prompt: str, function_schema: list[FunctionDefinition]
 ) -> str:
+    """LLMに渡すメインプロンプトの生成。"""
     scored_functions = [
         (fn, _calculate_jaccard_similarity(user_prompt, fn))
         for fn in function_schema
     ]
     scored_functions.sort(key=lambda x: x[1], reverse=True)
     top_functions = [fn for fn, score in scored_functions[:2]]
-
-    # 動的Few-shot, 丸暗記ではないモデルの学習
-    # 正規表現、引数のマッピング規則の学習
-    examples: dict[str, list[Any]] = {
-        'fn_add_numbers': [(
-            'Add 3 and 5',
-            '{"name": "fn_add_numbers", '
-            '"parameters": {"a": 3, "b": 5}}')
-        ],
-        'fn_greet': [(
-            'Say hello to captain',
-            '{"name": "fn_greet", '
-            '"parameters": {"name": "captain"}}')
-        ],
-        'fn_reverse_string': [(
-            'Reverse the string \'apple\'',
-            '{"name": "fn_reverse_string", '
-            '"parameters": {"s": "apple"}}'),
-            ('Reverse "XYZ_123"',
-                '{"name": "fn_reverse_string", '
-                '"parameters": {"s": "XYZ_123"}}')
-        ],
-        'fn_get_square_root': [(
-            'What is the square root of 9?',
-            '{"name": "fn_get_square_root", '
-            '"parameters": {"a": "9"}}')
-        ],
-        'fn_substitute_string_with_regex': [(
-            'Replace all numbers in "I have 2 apples" with NUMBERS',
-            '{"name": "fn_substitute_string_with_regex", '
-            '"parameters": {'
-            '"source_string": "I have 2 apples", '
-            '"regex": "\\\\d+", '
-            '"replacement": "NUMBERS"}}'),
-            ('Replace all vowels in "Testing 123" with asterisks',
-                '{"name": "fn_substitute_string_with_regex", '
-                '"parameters": {'
-                '"source_string": "Testing 123", '
-                '"regex": "[aeiouAEIOU]", '
-                '"replacement": "*"}}'),
-            ('Substitute "apple" with "orange" in '
-             '"I ate an apple and another apple"',
-                '{"name": "fn_substitute_string_with_regex", '
-                '"parameters": {'
-                '"source_string": "I ate an apple and another apple", '
-                '"regex": "apple", '
-                '"replacement": "orange"}}'),
-            ('Change the word "sad" to "happy" in '
-             '"The boy was sad because his toy broke"',
-                '{"name": "fn_substitute_string_with_regex", '
-                '"parameters": {'
-                '"source_string": "The boy was sad because his toy broke", '
-                '"regex": "sad", '
-                '"replacement": "happy"}}'),
-            ('Replace the letter "s" with "z" in '
-             '"This is a very long sentence that should not be cut short."',
-                '{"name": "fn_substitute_string_with_regex", '
-                '"parameters": {'
-                '"source_string": "This is a very long sentence '
-                'that should not be cut short.", '
-                '"regex": "s", '
-                '"replacement": "z"}}')
-        ]
-    }
 
     # Json -> mdへ変換
     markdown_schema = ""
@@ -155,15 +92,18 @@ def _build_prompt(
         "[Execution Steps]\n"
         "Step 1 (Read): Read the available functions and "
         "the user's input text.\n"
-        "Step 2 (Select): Select the correnct function and read its required "
-        "parameters and types."
+        "Step 2 (Select): Select the correct function and read its required "
+        "parameters and types.\n"
         "Step 3 (Extract): Find the exact information in the user's text "
         "that matches each parameter.\n"
         "Step 4 (Copy): Copy the extracted information directly "
         "into the JSON format.\n\n"
         "[Extraction Rules]\n"
         "- Numbers: Extract exact numbers from the text. "
-        "Never invent. calculate, or output default numbers like 0 or -1.\n"
+        "Never invent, calculate, or output default numbers like 0 or -1.\n"
+        "Even if the parameter type is 'number', YOU must determine whether "
+        "it should be an integer or a float based on the context. "
+        "Do not add unnecessary decimals.\n"
         "- Words/Sentences: Copy the target text EXACTLY. "
         "Do not summarize or truncate.\n"
         "- Patterns/Symbols: If asked to replace with a symbol "
@@ -174,46 +114,6 @@ def _build_prompt(
         f"{markdown_schema}"
         "<|im_end|>\n"
     )
-        # "<|im_start|>system\n"
-        # "You are a strict data extraction engine.\n"
-        # "Your ONLY job to identify the correct function and copy the exact "
-        # "values from the user's input into the parameters.\n"
-        # "CRITICAL RULES:\n"
-        # "1. NO HALLUCINATION: You MUST ONLY extract numbers and words "
-        # "that are explictly written in the user's prompt. "
-        # "NEVER invent, calculate, or use default numbers like 0 or -1.\n"
-        # "2. FULL EXTRACTION: When a parameter requires a sentence or phrase, "
-        # "copy the entire string exactly without truncation.\n"
-        # "3. PATTERNS: When a parameter requires a rule or pattern, output "
-        # "the exact target word or a standard Regex (e.g., \\d+).\n"
-        # "Available functions:\n"
-        # f"{markdown_schema}"
-        # "<|im_end|>\n"
-    # 最も関連性の高い関数の具体例を抽出
-    top_fn_name = _get_attr(top_functions[0], "name", "")
-    no_data_text = [
-        ("Extract data", '{"name": "unknown", "parameters": {}}')
-    ]
-    fn_examples = examples.get(top_fn_name, no_data_text)
-
-    # さらに関連度の高い1例を取得
-    if len(fn_examples) > 1:
-        prompt_words = set(re.findall(r'[a-zA-Z0-9]+', user_prompt.lower()))
-        scored_examples = []
-        for ex_u, ex_a in fn_examples:
-            ex_words = set(re.findall(r'[a-zA-Z0-9]+', ex_u.lower()))
-            intersection = prompt_words & ex_words
-            union = prompt_words | ex_words
-            score = len(intersection) / len(union) if union else 0.0
-            scored_examples.append((score, (ex_u, ex_a)))
-        scored_examples.sort(key=lambda x: x[0], reverse=True)
-        fn_examples = [ex for score, ex in scored_examples[:1]]
-
-    # 関数ごとの具体例を注入
-    # for ex_u, ex_a in fn_examples:
-        # prompt += f"<|im_start|>user\n{ex_u}\n<|im_end|>\n"
-        # prompt += f"<|im_start|>assistant\n{ex_a}\n<|im_end|>\n"
-        # print(f"DEBUG: user='{ex_u}'\nassist='{ex_a}'")
     prompt += f"<|im_start|>user\n{user_prompt}\n<|im_end|>\n"
     prompt += "<|im_start|>assistant\n{\n"
 
@@ -256,20 +156,20 @@ def main() -> None:
 
         # 依存オブジェクトの構築
         llm_client = LLMClient()
-        print("DEBUG: LLMClient define")
+        print("[INFO]: LLMClient define")
         tokenizer = Tokenizer(llm_client)
-        print("DEBUG: Tokenizer define")
+        print("[INFO]: Tokenizer define")
         constraint_filter = ConstraintFilter(
             tokenizer=tokenizer,
             available_functions=functions_data
         )
-        print("DEBUG: ConstraintFilter define")
+        print("[INFO]: ConstraintFilter define")
         engine = GenerationEngine(
             llm_client=llm_client,
             tokenizer=tokenizer,
             constraint_filter=constraint_filter
         )
-        print("DEBUG: Engine define")
+        print("[INFO]: Engine define")
 
         print(f"2. Starting processing of {len(prompts_data)} prompts...",
               file=sys.stderr)
@@ -283,7 +183,6 @@ def main() -> None:
                 user_prompt = prompt["prompt"]
             except KeyError:
                 continue
-            print(f"DEBUG: Prompt{index}. '{user_prompt}'", file=sys.stderr)
             # 取り出したpromptにkey="prompt"がなければ飛ばす
             if not user_prompt:
                 print(
@@ -292,6 +191,13 @@ def main() -> None:
                     file=sys.stderr
                 )
                 continue
+            print(f"Prompt{index}. '{user_prompt}'")
+            print("3")
+            time.sleep(1)
+            print("2")
+            time.sleep(1)
+            print("1...")
+            time.sleep(1)
             # 推論の直前でプロンプト固有の情報をFSMにセット
             # 内部情報をクリアにする
             constraint_filter.set_user_prompt(user_prompt)
@@ -315,9 +221,9 @@ def main() -> None:
                 # model.dump() -> dict形式での保存
                 results.append(result_model.model_dump())
                 p_time = prompt_end_time - prompt_start_time
-                print(f"DEBUG: Prompt{index}. {p_time:.4f} seconds")
-                print(f"DEBUG: Prompt{index}. '{user_prompt}'",
-                      file=sys.stderr)
+                print(f"Prompt{index}. {p_time:.4f} seconds")
+                print(f"Prompt{index}. '{user_prompt}'")
+                time.sleep(3)
             except Exception as e:
                 print(f"Error generating response for prompt"
                       f"'{user_prompt}': {e}", file=sys.stderr)
@@ -332,7 +238,7 @@ def main() -> None:
               f"Results saved to {config.output}", file=sys.stderr)
         program_end_time = time.time()
         t_time = program_end_time - program_start_time
-        print(f"DEBUG: Total. {t_time:.4f} seconds")
+        print(f"[INFO]: Total. {t_time:.4f} seconds")
     except Exception as e:
         print(f"MainError: Pipeline execution failed."
               f"{e}", file=sys.stderr)
@@ -347,6 +253,6 @@ if __name__ == "__main__":
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
-        print("KeyboardInterruptError: Ctrl + c has been detected."
-                , file=sys.stderr)
+        print("KeyboardInterruptError: "
+              "Ctrl + c has been detected.", file=sys.stderr)
         sys.exit(1)

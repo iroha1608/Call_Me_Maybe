@@ -1,5 +1,8 @@
 [
   {
+    "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\"<>?~\n\t👾"
+  },
+  {
     "prompt": "Process this exactly as an empty string: ''"
   },
   {

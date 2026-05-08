@@ -1,5 +1,12 @@
 [
   {
+    "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\"<>?~\n\t👾",
+    "name": "fn_process_extreme_text",
+    "parameters": {
+      "input_text": " !@#$%^&*()_+{}|:\"<>?~"
+    }
+  },
+  {
     "prompt": "Process this exactly as an empty string: ''",
     "name": "fn_process_extreme_text",
     "parameters": {
@@ -20,7 +27,7 @@
       "username": "true",
       "age": 25,
       "is_premium": true,
-      "delete_reason": "expired"
+      "delete_reason": null
     }
   },
   {
@@ -30,7 +37,7 @@
       "username": "random_username",
       "age": 12,
       "is_premium": false,
-      "delete_reason": "random_delete_reason"
+      "delete_reason": null
     }
   },
   {

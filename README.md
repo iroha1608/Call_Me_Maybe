@@ -34,8 +34,8 @@
 	4. [Visualization of the Generation Process](#4-4-Visualization-of-the-Generation-Process)
 	5. [Demonstration of How Encoding and Decoding Integrate with Constrained Decoding](#4-5-Demonstration-of-How-Encoding-and-Decoding-Integrate-with-Constrained-Decoding)
 5. [🌈Resources](#5-Resources)
-  1. [URL](#4-1-URL)
-  2. [AI Usage](#4-2-AI-Usage)
+	1. [URL](#4-1-URL)
+	2. [AI Usage](#4-2-AI-Usage)
   
 
 ## 💡1. Description

@@ -143,6 +143,14 @@ make lint-strict
 - [Function Callingとは？仕組みや使い方をわかりやすく解説](https://aismiley.co.jp/ai_news/what-is-function-calling/)
 - [生成AIアプリをより多機能に(Function Calling)](https://qiita.com/ksonoda/items/1ba3916c9ee9f4d9c10c)
 - [ArgumentParserの使い方](https://qiita.com/kzkadc/items/e4fc7bc9c003de1eb6d0)
+- [＃９🤖Constrained Decoding(制約付きデコーディング)【オルティス教授の松尾研LLMコンペ単語帳】](https://note.com/ortiz_aipartners/n/nbd1effbf4129)
+- [すごいTrie](https://qiita.com/minaminao/items/caf6d8147c7e70b6ae63)
+- [プッシュダウン・オートマトン](https://ja.wikipedia.org/wiki/%E3%83%97%E3%83%83%E3%82%B7%E3%83%A5%E3%83%80%E3%82%A6%E3%83%B3%E3%83%BB%E3%82%AA%E3%83%BC%E3%83%88%E3%83%9E%E3%83%88%E3%83%B3)
+- [LLM構造化出力とConstrained Decoding実践ガイド: JSON Schemaから本番アプリケーションまで](https://www.youngju.dev/blog/llm/2026-03-07-llm-structured-output-constrained-decoding-json-schema.ja)
+- [自作トークナイザーを作ってみた。](https://tech-blog.cloud-config.jp/2024-12-25-tokenizer-from-scratch)
+- [Qwen 3](https://note.com/npaka/n/n43abd5843fe7)
+- [pyTorchのTensor型とは](https://qiita.com/mathlive/items/241bfb42d852bb801b96)
+- [イラストで理解するSOLID原則](https://qiita.com/baby-degu/items/d058a62f145235a0f007)
 
 
 ### 4-2. AIの使用について

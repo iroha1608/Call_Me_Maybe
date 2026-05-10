@@ -55,6 +55,16 @@ make run
 	Describe how you validated your implementation  
 ### 3-6.Example usage
 	Provide clear examples of running your program  
+### 3-7. Bonus
+- Support for multiple LLM models beyond Qwen/Qwen3-0.6B  
+- Recoding the tokenizer: avoiding direct use of encode and decode in the main code, instead using get_logits_from_input_ids and get_path_to_vocabulary_json  
+- Advanced error recovery mechanisms  
+- Performance optimizations (caching, batching)  
+- Comprehensive test suite  
+- Visualization of the generation process  
+- Support for complex nested function arguments  
+- Public implementation of tokenizer encode and optional decode methods  
+- Demonstration of how encoding and decoding integrate with constrained decoding  
 
 ## 4.Resources
 ---

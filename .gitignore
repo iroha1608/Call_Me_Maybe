@@ -13,7 +13,6 @@ env/
 venv/
 
 # usrs
-*.png
 * _cache
 
 # mypy

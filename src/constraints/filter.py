@@ -421,6 +421,19 @@ class ConstraintFilter:
                     continue
 
                 if '"' in clean_str:
+                    # "より後ろの文字をチェック
+                    after_quote = clean_str.split('"', 1)[1].strip()
+                    if after_quote:
+                        is_last_param = (
+                            len(self._seen_param_keys) == len(
+                                self._expected_param_keys))
+                        # 残りの引数が無い時、継続禁止
+                        if is_last_param and ',' in after_quote:
+                            continue
+                        # 残り引数がある時、終了禁止
+                        if not is_last_param and '}' in after_quote:
+                            continue
+
                     if '\\"' in clean_str or ctx.current_string.endswith('\\'):
                         valid_token_ids.add(t_id)
                         continue

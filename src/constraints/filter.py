@@ -577,6 +577,7 @@ class ConstraintFilter:
                 valid_token_ids = self._filter_in_string_tokens(ctx)
 
             # ------------------------- 最終調整 -------------------------
+
             # 許可したtoken_idがない時、暴走防止でフォールバック
             if not valid_token_ids:
                 print("許可tokenなし")

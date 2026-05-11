@@ -133,6 +133,7 @@ def _save_json_file(file_path: str, results: Any) -> None:
 def main() -> None:
     program_start_time = time.time()
     try:
+        # -------------------- 外部データの読み込み --------------------
         # CLIから指定された(またはデフォルトの)各データの読み込み->config
         config: CLIConfig = parse_arguments()
 
@@ -152,19 +153,22 @@ def main() -> None:
                 "Function definitons file must contain a JSON array"
             )
 
+        # --------------- 依存オブジェクトの構築 ---------------
         print("\x1b[2J\x1b[H\x1b[s", end="")
         print("1. Initializing models and components...")
 
-        # 依存オブジェクトの構築
         llm_client = LLMClient()
         print("[INFO]: LLMClient define")
+
         tokenizer = Tokenizer(llm_client)
         print("[INFO]: Tokenizer define")
+
         constraint_filter = ConstraintFilter(
             tokenizer=tokenizer,
             available_functions=functions_data
         )
         print("[INFO]: ConstraintFilter define")
+
         engine = GenerationEngine(
             llm_client=llm_client,
             tokenizer=tokenizer,
@@ -172,26 +176,27 @@ def main() -> None:
         )
         print("[INFO]: Engine define")
 
-        print(f"2. Starting processing of {len(prompts_data)} prompts...",
-              file=sys.stderr)
+        # --------------- プロンプトの読み込み ---------------
+        print(f"2. Starting processing of {len(prompts_data)} prompts...")
 
         results: list[dict[str, Any]] = []
+
         # prompts_dataからpromptを一つづつ処理
         for index, prompt in enumerate(prompts_data, start=1):
+
             if not isinstance(prompt, dict):
                 continue
             try:
                 temp_prompt: str = prompt["prompt"]
             except KeyError:
                 continue
+
             # 取り出したpromptにkey="prompt"がなければ飛ばす
             if not temp_prompt:
-                print(
-                    f"Waring: skipping prompt {index} "
-                    f"due to missing 'prompt' key",
-                    file=sys.stderr
-                )
+                print(f"Waring: skipping prompt {index} "
+                      f"due to missing 'prompt' key", file=sys.stderr)
                 continue
+
             # プロンプト中の'"'->'\"'に変換
             user_prompt = temp_prompt
             if '"' in temp_prompt:
@@ -206,31 +211,32 @@ def main() -> None:
             time.sleep(1)
 
             # 推論の直前でプロンプト固有の情報をFSMにセット
-            # 内部情報をクリアにする
+            # 内部情報をリセットする
             constraint_filter.set_user_prompt(user_prompt)
 
             # コンテキストを含めたプロンプトの構築
             primed_prompt = _build_prompt(user_prompt, functions_data)
 
             try:
-                # 推論エンジンの実行
+                # 推論エンジンの実行(+時間計測)
                 prompt_start_time = time.time()
                 output_data = engine.generate(primed_prompt)
                 prompt_end_time = time.time()
 
-                # 結果の記録(要件に準拠したformat)
+                # 結果の記録(要件に準拠したフォーマットか判定)
                 result_model = FunctionCallResult(
-                    prompt=user_prompt,
+                    prompt=temp_prompt,
                     name=output_data.get("name", "unknown"),
                     parameters=output_data.get("parameters", {})
                 )
 
-                # model.dump() -> dict形式での保存
+                # model.dump() -> dict形式での保存、resultsに追加していく
                 results.append(result_model.model_dump())
                 p_time = prompt_end_time - prompt_start_time
                 print(f"Prompt{index}. {p_time:.4f} seconds")
                 print(f"Prompt{index}. '{user_prompt}'")
                 time.sleep(3)
+
             except Exception as e:
                 print(f"Error generating response for prompt"
                       f"'{user_prompt}': {e}", file=sys.stderr)
@@ -246,6 +252,7 @@ def main() -> None:
         program_end_time = time.time()
         t_time = program_end_time - program_start_time
         print(f"[INFO]: Total. {t_time:.4f} seconds")
+
     except Exception as e:
         print(f"MainError: Pipeline execution failed."
               f"{e}", file=sys.stderr)

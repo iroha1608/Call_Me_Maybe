@@ -46,13 +46,12 @@ class GenerationEngine:
         自己回帰性ループ
         """
         try:
-            input_ids = self._tokenizer.encode(prompt)
-            # print(f"DEBUG: imput_ids='{input_ids}'", file=sys.stderr)
+            input_ids: list[int] = self._tokenizer.encode(prompt)
             token_ids: list[int] = []
-            current_text = ""
+            current_text: str = ""
 
             for _ in range(self._max_new_tokens):
-                current_sequence = input_ids + token_ids
+                current_sequence: list[int] = input_ids + token_ids
                 logits: list[float] = self._llm.get_logits(current_sequence)
 
                 # --------------- 制約前のLogitsの表示 ---------------
@@ -70,8 +69,7 @@ class GenerationEngine:
 
                 # 無効なトークンを選択されないように処理
                 filtered_logits = self._constraint_filter.filter_logits(
-                    logits=logits,
-                    current_text=current_text
+                    logits=logits, current_text=current_text
                 )
                 next_token_id = self._argmax(filtered_logits)
                 token_ids.append(next_token_id)

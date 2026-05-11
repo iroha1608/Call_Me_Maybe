@@ -329,6 +329,11 @@ class ConstraintFilter:
                         if not is_valid_token:
                             continue
 
+                # "parameters": {"type": "int"}の時
+                elif param_type in ("integer", "int"):
+                    allowed_num = allowed_chars - {"t", "f", "n", '"', '.'}
+                    if '"' in t_str and clean_str:
+                        continue
                 # "parameters": {"type": "boolean"}の時
                 elif param_type in ("boolean", "bool"):
                     if '"' in t_str:
@@ -398,8 +403,6 @@ class ConstraintFilter:
         for t_id, t_str in self._vocab_items:
             clean_str = t_str.replace("Ġ", " ")
             new_str = ctx.current_string + clean_str
-            if t_id in (330, 2974, 4884):
-                continue
 
             # 2-5-1. keyまたは関数名の入力中
             if target_strings or is_fn_name_context:

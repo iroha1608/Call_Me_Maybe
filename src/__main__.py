@@ -152,7 +152,8 @@ def main() -> None:
                 "Function definitons file must contain a JSON array"
             )
 
-        print("1. Initializing models and components...", file=sys.stderr)
+        print("\x1b[2J\x1b[H\x1b[s", end="")
+        print("1. Initializing models and components...")
 
         # 依存オブジェクトの構築
         llm_client = LLMClient()
@@ -180,17 +181,22 @@ def main() -> None:
             if not isinstance(prompt, dict):
                 continue
             try:
-                user_prompt = prompt["prompt"]
+                temp_prompt: str = prompt["prompt"]
             except KeyError:
                 continue
             # 取り出したpromptにkey="prompt"がなければ飛ばす
-            if not user_prompt:
+            if not temp_prompt:
                 print(
                     f"Waring: skipping prompt {index} "
                     f"due to missing 'prompt' key",
                     file=sys.stderr
                 )
                 continue
+            # プロンプト中の'"'->'\"'に変換
+            user_prompt = temp_prompt
+            if '"' in temp_prompt:
+                user_prompt = temp_prompt.replace('"', '\\"')
+
             print(f"Prompt{index}. '{user_prompt}'")
             print("3")
             time.sleep(1)
@@ -198,6 +204,7 @@ def main() -> None:
             time.sleep(1)
             print("1...")
             time.sleep(1)
+
             # 推論の直前でプロンプト固有の情報をFSMにセット
             # 内部情報をクリアにする
             constraint_filter.set_user_prompt(user_prompt)

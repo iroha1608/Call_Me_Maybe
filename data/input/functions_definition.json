@@ -4,10 +4,10 @@
     "description": "Add two numbers together and return their sum.",
     "parameters": {
       "a": {
-        "type": "number"
+        "type": "int"
       },
       "b": {
-        "type": "number"
+        "type": "int"
       }
     },
     "returns": {
@@ -43,11 +43,11 @@
     "description": "Calculate the square root of a number.",
     "parameters": {
       "a": {
-        "type": "number"
+        "type": "int"
       }
     },
     "returns": {
-      "type": "number"
+      "type": "int"
     }
   },
   {

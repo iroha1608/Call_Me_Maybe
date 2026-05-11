@@ -264,15 +264,22 @@ class ConstraintFilter:
                     continue
             if param_type:
                 clean_str = t_str.replace("Ġ", " ").strip(' \n\r\tĊ')
+
                 # "parameters": {"type": "string"}の時
                 if param_type in ("string", "str"):
                     if '"' not in t_str and clean_str:
                         continue
+
                 # "parameters": {"type": "number"}の時
-                elif param_type in ("number", "num"):
+                elif param_type in ("number", "num", "integer", "int"):
+
                     allowed_num = allowed_chars - {"t", "f", "n", '"'}
                     if '"' in t_str and clean_str:
                         continue
+                    # "parameters": {"type": "int"}の時
+                    if param_type in ("integer", "int"):
+                        allowed_num = allowed_chars - {'.'}
+
                     raw_prompt = getattr(self, "_raw_user_prompt", "")
                     force_terminate = False
 
@@ -295,7 +302,7 @@ class ConstraintFilter:
                             for p_num in prompt_numbers:
                                 if current_val_str == p_num:
                                     force_terminate = True
-
+                    # 強制終了
                     if force_terminate:
                         allowed_num = allowed_num - set("0123456789.eE+")
 
@@ -329,11 +336,6 @@ class ConstraintFilter:
                         if not is_valid_token:
                             continue
 
-                # "parameters": {"type": "int"}の時
-                elif param_type in ("integer", "int"):
-                    allowed_num = allowed_chars - {"t", "f", "n", '"', '.'}
-                    if '"' in t_str and clean_str:
-                        continue
                 # "parameters": {"type": "boolean"}の時
                 elif param_type in ("boolean", "bool"):
                     if '"' in t_str:
@@ -389,6 +391,7 @@ class ConstraintFilter:
                 if self._target_fn_name
                 else self._valid_fn_names
             )
+
         # 2-4. parameterのvalueかつ引数の中身の時
         elif ctx.depth == 2 and ctx.is_value_context:
             # 現在の最適関数のschemaを取得
@@ -432,10 +435,6 @@ class ConstraintFilter:
                             valid_token_ids.add(t_id)
                         continue
 
-                    # 出力中の文字列がプロンプトの中にある時
-                    # if unescaped_val in raw_prompt:
-                        # print("デバッグ1\n")
-                        # continue
                     valid_token_ids.add(t_id)
                     continue
                 valid_token_ids.add(t_id)

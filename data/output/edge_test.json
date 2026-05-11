@@ -1,6 +1,6 @@
 [
   {
-    "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\"<>?~\n\t👾",
+    "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\\\"<>?~\n\t👾",
     "name": "fn_process_extreme_text",
     "parameters": {
       "input_text": " !@#$%^&*()_+{}|:\"<>?~"

@@ -1,5 +1,8 @@
 [
   {
+    "prompt": "Process the text with local path: \"C:\\Users\\username\\AppData\\Roaming\""
+  },
+  {
     "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\"<>?~\n\t👾"
   },
   {

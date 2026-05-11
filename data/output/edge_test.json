@@ -1,5 +1,12 @@
 [
   {
+    "prompt": "Process the text with local path: \\\"C:\\Users\\username\\AppData\\Roaming\\\"",
+    "name": "fn_process_extreme_text",
+    "parameters": {
+      "input_text": "C:\\Users\\username\\AppData\\Roaming\\"
+    }
+  },
+  {
     "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\\\"<>?~\n\t👾",
     "name": "fn_process_extreme_text",
     "parameters": {

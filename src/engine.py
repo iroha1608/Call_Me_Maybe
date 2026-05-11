@@ -55,17 +55,17 @@ class GenerationEngine:
                 current_sequence = input_ids + token_ids
                 logits: list[float] = self._llm.get_logits(current_sequence)
 
-                # 制約前のLogitsの表示
+                # --------------- 制約前のLogitsの表示 ---------------
                 print("\x1b[2J\x1b[H\x1b[s", end="")
                 print(" --------------- "
-                        "\33[1;5;34mBefore Logits\33[0m ---------------")
+                      "\33[1;5;34mBefore Logits\33[0m ----------------")
                 top_logits = (sorted(range(len(logits)),
-                    key=lambda i: logits[i], reverse=True)[:5])
+                              key=lambda i: logits[i], reverse=True)[:5])
                 for idx in top_logits:
                     t_str = self._tokenizer.decode([idx]).replace('\n', '\\n')
                     score = logits[idx]
                     print(f"|ID: {idx:6} | "
-                            f"Score: {score:7.2f} | Token '{t_str}'")
+                          f"Score: {score:7.2f} | Token '{t_str}'")
                 print(" ---------------------------------------------\n")
 
                 # 無効なトークンを選択されないように処理
@@ -74,48 +74,43 @@ class GenerationEngine:
                     current_text=current_text
                 )
                 next_token_id = self._argmax(filtered_logits)
-                # print(f"DEBUG: next_token_id='{next_token_id}'")
                 token_ids.append(next_token_id)
                 # decode
                 current_text = self._tokenizer.decode(token_ids)
 
-                # print(f"DEBUG: current_text='{current_text}'")
-                # 制約後のLogitsの表示
+                # --------------- 制約後のLogitsの表示 ---------------
                 top_filtered_logits = (sorted(range(len(logits)),
-                    key=lambda i: filtered_logits[i], reverse=True)[:5])
+                                       key=lambda i: filtered_logits[i],
+                                       reverse=True)[:5])
                 print(" --------------- "
-                        "\33[1;5;35mAfter Logits\33[0m ---------------")
+                      "\33[1;5;35mAfter Logits\33[0m ---------------")
                 for idx in top_filtered_logits:
                     t_str = self._tokenizer.decode([idx]).replace('\n', '\\n')
                     score = filtered_logits[idx]
                     print(f"|\33[31mID\33[0m: {idx:6} | "
-                            f"\33[32mScore\33[0m: {score:7.2f} | "
-                            f"\33[33mToken\33[0m: '{t_str}'")
+                          f"\33[32mScore\33[0m: {score:7.2f} | "
+                          f"\33[33mToken\33[0m: '{t_str}'")
                 print(" ---------------------------------------------\n")
                 print(f"current_text: \33[1;3m{current_text}\33[0m")
 
                 # current_text -> clean_text
                 c_text = current_text.replace("Ċ", "\n").replace("Ġ", " ")
-                cl_text = c_text.strip()
-                clean_text = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', cl_text)
+                clean_text = c_text.strip()
+                # clean_text = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', cl_text)
 
-                # _max_tokensの上限になる前に有効なJsonオブジェクトが
-                # 形成された時点でループ脱出 -> 計算資源を最適化
+                # max_tokensの上限前にJsonが形成された時点でループ脱出
                 if clean_text.endswith("}"):
                     try:
-                        # print("End Pointに入りました", file=sys.stderr)
                         parsed_json = json.loads(clean_text)
                         if isinstance(parsed_json, dict):
                             return parsed_json
                     except json.JSONDecodeError:
-                        # print("DEBUG: JSONDecodeErrorに入りました")
-                        # print("DEBUG: 終端済み、成形中")
                         pass
                 sleep(0.2)
 
             c_text = current_text.replace("Ċ", "\n").replace("Ġ", " ")
-            cl_text = c_text.strip()
-            clean_text = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', cl_text)
+            clean_text = c_text.strip()
+            # clean_text = re.sub(r'\\(?![/"\\bfnrtu])', r'\\\\', cl_text)
             try:
                 parsed_json = json.loads(clean_text)
                 if isinstance(parsed_json, dict):

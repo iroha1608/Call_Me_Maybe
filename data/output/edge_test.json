@@ -1,13 +1,13 @@
 [
   {
-    "prompt": "Process the text with local path: \\\"C:\\Users\\username\\AppData\\Roaming\\\"",
+    "prompt": "Process the text with local path: \"C:\\Users\\username\\AppData\\Roaming\"",
     "name": "fn_process_extreme_text",
     "parameters": {
       "input_text": "C:\\Users\\username\\AppData\\Roaming\\"
     }
   },
   {
-    "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\\\"<>?~\n\t👾",
+    "prompt": "Process the text with special characters: !@#$%^&*()_+{}|:\"<>?~\n\t👾",
     "name": "fn_process_extreme_text",
     "parameters": {
       "input_text": " !@#$%^&*()_+{}|:\"<>?~"
@@ -41,7 +41,7 @@
     "prompt": "Ummm... I don't know what to do. Just do something random, okay?",
     "name": "fn_complex_profile_update",
     "parameters": {
-      "username": "random_username",
+      "username": "random",
       "age": 12,
       "is_premium": false,
       "delete_reason": null

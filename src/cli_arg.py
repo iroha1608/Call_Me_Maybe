@@ -54,6 +54,6 @@ def parse_arguments() -> CLIConfig:
         )
 
     except Exception as e:
-        print(f"CLI Error: Argument parsing failed."
+        print(f"[\33[31mCLI Error\33[0m]: Argument parsing failed."
               f"{e}", file=sys.stderr)
         exit(1)

@@ -5,27 +5,22 @@ import time
 import re
 from pathlib import Path
 from typing import Any
+from pydantic import ValidationError
 
 from src.cli_arg import parse_arguments, CLIConfig
 from src.llm_client import LLMClient
 from src.tokenizer import Tokenizer
 from src.constraints.filter import ConstraintFilter
 from src.engine import GenerationEngine
-from src.models import FunctionCallResult, FunctionDefinition
-
-
-def _get_attr(obj: Any, key: str, default: Any = "") -> Any:
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
+from src.models import PromptInput, FunctionDefinition, FunctionCallResult
 
 
 def _load_json_file(file_path: str) -> Any:
-    """ JSONファイルの読み込み"""
+    """JSONファイルの読み込み"""
     path = Path(file_path)
 
     if not path.exists():
-        raise FileNotFoundError("Required file not found: {path}")
+        raise FileNotFoundError(f"Required file not found: {path}")
 
     try:
         with path.open("r", encoding="utf-8") as f:
@@ -35,10 +30,10 @@ def _load_json_file(file_path: str) -> Any:
         raise ValueError(f"Required file not found: {path}") from e
 
     except PermissionError as e:
-        raise ValueError(f": {path}") from e
+        raise ValueError(f"Permission denied: {path}") from e
 
     except IsADirectoryError as e:
-        raise ValueError(f": {path}") from e
+        raise ValueError(f"Path is a derectory, not a file: {path}") from e
 
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON format in {path}: {e}") from e
@@ -50,8 +45,8 @@ def _calculate_jaccard_similarity(
     """プロンプトと関数定義間のJaccard係数を計算する。"""
     # 正規表現で英数字のみ抽出
     prompt_words = set(re.findall(r'[a-zA-Z0-9_]+', user_prompt.lower()))
-    name = _get_attr(fn_def, "name", "")
-    desc = _get_attr(fn_def, "description", "")
+    name = fn_def.name
+    desc = fn_def.description
 
     name_words = set(
         re.findall(r'[a-zA-Z0-9]+', name.lower().replace("_", " "))
@@ -78,19 +73,12 @@ def _build_prompt(
     # Json -> mdへ変換
     markdown_schema = ""
     for fn in top_functions:
-        name = _get_attr(fn, "name", "")
-        desc = _get_attr(fn, "description", "")
-        markdown_schema += f"- Function Name: {name}\n"
-        markdown_schema += f"  Purpose: {desc}\n"
-        params = _get_attr(fn, "parameters", {})
-        if params and isinstance(params, dict):
+        markdown_schema += f"- Function Name: {fn.name}\n"
+        markdown_schema += f"  Purpose: {fn.description}\n"
+        if fn.parameters:
             markdown_schema += "  Arguments:\n"
-            for prop_name, prop_details in params.items():
-                if isinstance(prop_details, dict):
-                    prop_type = _get_attr(prop_details, "type", "any")
-                else:
-                    prop_type = "any"
-                markdown_schema += f"    * {prop_name} ({prop_type})\n"
+            for prop_name, prop_details in fn.parameters.items():
+                markdown_schema += f"    * {prop_name} ({prop_details.type})\n"
         markdown_schema += "\n"
 
     # Main Prompt
@@ -117,7 +105,7 @@ def _build_prompt(
         "- Words/Sentences: Copy the target text EXACTLY. "
         "Do not summarize or truncate.\n"
         "- Patterns/Symbols: If asked to replace with a symbol "
-        "(e.g., 'asterisks'), output the actual symbol (e.g, '*'.) "
+        "(e.g., 'asterisks'), output the actual symbol (e.g, '\*'.) "
         "If a regex pattern is needed, "
         "output the standard regex (e.g., \\d+).\n\n"
         "Available functions:\n"
@@ -131,6 +119,7 @@ def _build_prompt(
 
 
 def _save_json_file(file_path: str, results: Any) -> None:
+    """出力結果をJSONに保存する関数"""
     path = Path(file_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -142,124 +131,125 @@ def _save_json_file(file_path: str, results: Any) -> None:
 
 def main() -> None:
     program_start_time = time.time()
+    print("\x1b[2J\x1b[H\x1b[s", end="")
+    print("1. ...")
     try:
         # -------------------- 外部データの読み込み --------------------
         # CLIから指定された(またはデフォルトの)各データの読み込み->config
         config: CLIConfig = parse_arguments()
 
-        # プロンプトの読み込み->prompts_data
-        prompts_data: list[dict[str, str]] = _load_json_file(config.input)
-        if not isinstance(prompts_data, list):
+        # -------------------- プロンプトのバリデーション --------------------
+        # プロンプトの読み込み->raw_prompts_data
+        raw_prompts_data: list[dict[str, Any]] = _load_json_file(config.input)
+        if not isinstance(raw_prompts_data, list):
             raise ValueError(
                 "Input prompts file must contain a JSON array"
             )
-        print("[INFO] The prompt data has been loaded!")
 
-        # 関数データの読み込み->functions_data
-        functions_data: list[FunctionDefinition] = (
-            _load_json_file(config.function_definition)
-        )
-        if not isinstance(functions_data, list):
+        valid_prompts_data: list[PromptInput] = []
+        for index, p_data in enumerate(raw_prompts_data, start=1):
+            try:
+                valid_p = PromptInput.model_validate(p_data)
+                valid_prompts_data.append(valid_p)
+            except ValidationError as e:
+                print(
+                    f"[WARNING] Skipping prompt {index} "
+                    f"due to validation error:\n{e}", file=sys.stderr)
+                continue
+
+        if not valid_prompts_data:
+            raise ValueError(
+                "The required keys were missing from all functions."
+            )
+
+        print(f"[\33[32mINFO\33[0m] {len(valid_prompts_data)} "
+              "prompts data has been loaded!")
+        time.sleep(0.3)
+
+        # -------------------- 関数定義のバリデーション --------------------
+        # 関数データの読み込み->raw_functions_data
+        raw_functions_data = _load_json_file(config.function_definition)
+        if not isinstance(raw_functions_data, list):
             raise ValueError(
                 "Function definitons file must contain a JSON array."
             )
 
-        # -------------------- 関数定義のキーをチェック --------------------
         valid_functions_data: list[FunctionDefinition] = []
-        for index, f_data in enumerate(functions_data, start=1):
-            name = _get_attr(f_data, "name", "")
-            param = _get_attr(f_data, "parameters", None)
-            desc = _get_attr(f_data, "description", "")
-            ret = _get_attr(f_data, "returns", None)
-            if not name or param is None:
+        for index, f_data in enumerate(raw_functions_data, start=1):
+            try:
+                valid_fn = FunctionDefinition.model_validate(f_data)
+                valid_functions_data.append(valid_fn)
+            except ValidationError as e:
                 print(
-                    f"[WARNING] Missing required keys: {index}. {f_data}",
-                    file=sys.stderr)
-                time.sleep(3)
+                    f"[\33[33mWARNING\33[0m] Skipping function {index} "
+                    f"due to validation error:\n{e}", file=sys.stderr)
                 continue
-            if not desc:
-                print(
-                    f"[INFO] Function '{name}' lacks a 'description'. "
-                    "LLM accuracy may decrease.", file=sys.stderr)
-                f_data["descriptino"] = "No description provided."
-            if ret is None:
-                print(
-                    f"[INFO] Function '{name}' lacks a 'returns'.",
-                    file=sys.stderr)
-                f_data["returns"] = {"type": "void"}
-
-            valid_functions_data.append(f_data)
 
         if not valid_functions_data:
             raise ValueError(
                 "The required keys were missing from all functions."
             )
-        functions_data = valid_functions_data
-        print("[INFO] The function definition has been loaded!")
 
-        # --------------- 依存オブジェクトの構築 ---------------
-        print("\x1b[2J\x1b[H\x1b[s", end="")
-        print("1. Initializing models and components...")
+        print(f"[\33[32mINFO\33[0m] {len(valid_functions_data)} "
+              "functions definition has been loaded!")
+        time.sleep(0.3)
+
+        # -------------------- 依存オブジェクトの構築 --------------------
+        print("2. \33[1mInitializing models and components...\33[0m")
 
         llm_client = LLMClient()
-        print("[INFO]: LLMClient define")
+        print("[\33[32mINFO\33[0m] LLMClient has been loaded!")
+        time.sleep(0.3)
 
         tokenizer = Tokenizer(llm_client)
-        print("[INFO]: Tokenizer define")
+        print("[\33[32mINFO\33[0m] Tokenizer has been loaded!")
+        time.sleep(0.3)
 
         constraint_filter = ConstraintFilter(
             tokenizer=tokenizer,
-            available_functions=functions_data
+            available_functions=valid_functions_data
         )
-        print("[INFO]: ConstraintFilter define")
+        print("[\33[32mINFO\33[0m] ConstraintFilter has been loaded!")
+        time.sleep(0.3)
 
         engine = GenerationEngine(
             llm_client=llm_client,
             tokenizer=tokenizer,
             constraint_filter=constraint_filter
         )
-        print("[INFO]: Engine define")
+        print("[\33[32mINFO\33[0m] Engine has been loaded!")
+        time.sleep(0.3)
 
-        # --------------- プロンプトの読み込み ---------------
-        print(f"2. Starting processing of {len(prompts_data)} prompts...")
+        # -------------------- プロンプトの読み込み --------------------
+        print("3. Starting processing of "
+              f"{len(valid_prompts_data)} prompts...")
 
         results: list[dict[str, Any]] = []
 
         # prompts_dataからpromptを一つづつ処理
-        for index, prompt in enumerate(prompts_data, start=1):
+        time.sleep(2)
+        for index, prompt in enumerate(valid_prompts_data, start=1):
 
-            if not isinstance(prompt, dict):
-                continue
-            try:
-                temp_prompt: str = prompt["prompt"]
-            except KeyError:
-                continue
-
-            # 取り出したpromptにkey="prompt"がなければ飛ばす
-            if not temp_prompt:
-                print(f"Waring: skipping prompt {index} "
-                      f"due to missing 'prompt' key", file=sys.stderr)
-                continue
-
+            raw_prompt: str = prompt.prompt
             # プロンプト中の'"'->'\"'に変換
-            user_prompt = temp_prompt
-            if '"' in temp_prompt:
-                user_prompt = temp_prompt.replace('"', '\\"')
+            user_prompt = raw_prompt
+            if '"' in raw_prompt:
+                user_prompt = raw_prompt.replace('"', '\\"')
 
-            print(f"Prompt{index}. '{user_prompt}'")
-            print("3")
-            time.sleep(1)
-            print("2")
-            time.sleep(1)
-            print("1...")
-            time.sleep(1)
+            print(f"Prompt{index}. '{raw_prompt}'")
+            print("3", end="")
+            time.sleep(1.2)
+            print("2", end="")
+            time.sleep(1.2)
+            print("1...", end="")
+            time.sleep(1.2)
 
             # 推論の直前でプロンプト固有の情報をFSMにセット
             # 内部情報をリセットする
-            constraint_filter.set_user_prompt(user_prompt)
+            constraint_filter.set_user_prompt(raw_prompt)
 
             # コンテキストを含めたプロンプトの構築
-            primed_prompt = _build_prompt(user_prompt, functions_data)
+            primed_prompt = _build_prompt(user_prompt, valid_functions_data)
 
             try:
                 # 推論エンジンの実行(+時間計測)
@@ -269,7 +259,7 @@ def main() -> None:
 
                 # 結果の記録(要件に準拠したフォーマットか判定)
                 result_model = FunctionCallResult(
-                    prompt=temp_prompt,
+                    prompt=raw_prompt,
                     name=output_data.get("name", "unknown"),
                     parameters=output_data.get("parameters", {})
                 )
@@ -285,20 +275,21 @@ def main() -> None:
                 print(f"Error generating response for prompt"
                       f"'{user_prompt}': {e}", file=sys.stderr)
                 results.append({
-                    "prompt": temp_prompt,
+                    "prompt": raw_prompt,
                     "error": str(e)
                 })
 
         # ------------------------- 結果の保存 -------------------------
         _save_json_file(config.output, results)
-        print(f"3. Success: Processed {len(results)} items. "
+        print(f"4. Success: Processed {len(results)} items. "
               f"Results saved to {config.output}")
         program_end_time = time.time()
         t_time = program_end_time - program_start_time
-        print(f"[INFO]: Total. {t_time:.4f} seconds")
+        print(f"[\33[32mINFO\33[0m] Total. {t_time:.4f} seconds")
 
     except Exception as e:
-        print(f"MainError: Pipeline execution failed. {e}", file=sys.stderr)
+        print(f"[\33[31mMainError\33[0m]: Pipeline execution failed. {e}",
+              file=sys.stderr)
         print(e.__doc__)
         exit(1)
 
@@ -307,7 +298,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"[\33[31mError\33[0m]: {e}", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         print("KeyboardInterruptError: "

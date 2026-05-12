@@ -64,7 +64,7 @@ class GenerationEngine:
                     score = logits[idx]
                     print(f"|ID: {idx:6} | "
                           f"Score: {score:7.2f} | Token '{t_str}'")
-                print(" ---------------------------------------------\n")
+                print(" ---------------------------------------------- \n")
 
                 # 無効なトークンを選択されないように処理
                 filtered_logits = self._constraint_filter.filter_logits(
@@ -79,8 +79,8 @@ class GenerationEngine:
                 top_filtered_logits = (sorted(range(len(logits)),
                                        key=lambda i: filtered_logits[i],
                                        reverse=True)[:5])
-                print(" --------------- "
-                      "\33[1;5;35mAfter Logits\33[0m ---------------")
+                print(" ---------------- "
+                      "\33[1;5;35mAfter Logits\33[0m ----------------")
                 for idx in top_filtered_logits:
                     t_str = self._tokenizer.decode([idx]).replace('\n', '\\n')
                     score = filtered_logits[idx]
@@ -88,6 +88,7 @@ class GenerationEngine:
                           f"\33[32mScore\33[0m: {score:7.2f} | "
                           f"\33[33mToken\33[0m: '{t_str}'")
                 print(" ---------------------------------------------\n")
+                # print(f"prompt: \33[1;3m{prompt}\33[0m")
                 print(f"current_text: \33[1;3m{current_text}\33[0m")
 
                 # current_text -> clean_text
@@ -121,7 +122,7 @@ class GenerationEngine:
             )
 
         except Exception as e:
-            print(f"EngineError: Generation pipeline failed."
+            print(f"[\33[31mEngineError\33[0m]: Generation pipeline failed."
                   f"{e}", file=sys.stderr)
             return {"name": "unknown", "parameters": {
                 }}

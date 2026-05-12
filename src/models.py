@@ -23,7 +23,7 @@ class FunctionDefinition(BaseModel):
         description="The name of the function."
     )
     description: str = Field(
-        ...,
+        default="No description provided.",
         description="A brief description of what the function does."
     )
     parameters: dict[str, ParameterDefinition] = Field(

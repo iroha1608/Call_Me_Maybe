@@ -1,6 +1,5 @@
 import sys
 import json
-import re
 from typing import Any
 from time import sleep
 

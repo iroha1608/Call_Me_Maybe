@@ -21,14 +21,24 @@ def _get_attr(obj: Any, key: str, default: Any = "") -> Any:
 
 
 def _load_json_file(file_path: str) -> Any:
+    """ JSONファイルの読み込み"""
     path = Path(file_path)
+
     if not path.exists():
         raise FileNotFoundError("Required file not found: {path}")
+
     try:
         with path.open("r", encoding="utf-8") as f:
             return json.load(f)
+
     except FileNotFoundError as e:
         raise ValueError(f"Required file not found: {path}") from e
+
+    except PermissionError as e:
+        raise ValueError(f": {path}") from e
+
+    except IsADirectoryError as e:
+        raise ValueError(f": {path}") from e
 
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON format in {path}: {e}") from e
@@ -143,6 +153,7 @@ def main() -> None:
             raise ValueError(
                 "Input prompts file must contain a JSON array"
             )
+        print("[INFO] The prompt data has been loaded!")
 
         # 関数データの読み込み->functions_data
         functions_data: list[FunctionDefinition] = (
@@ -150,8 +161,41 @@ def main() -> None:
         )
         if not isinstance(functions_data, list):
             raise ValueError(
-                "Function definitons file must contain a JSON array"
+                "Function definitons file must contain a JSON array."
             )
+
+        # -------------------- 関数定義のキーをチェック --------------------
+        valid_functions_data: list[FunctionDefinition] = []
+        for index, f_data in enumerate(functions_data, start=1):
+            name = _get_attr(f_data, "name", "")
+            param = _get_attr(f_data, "parameters", None)
+            desc = _get_attr(f_data, "description", "")
+            ret = _get_attr(f_data, "returns", None)
+            if not name or param is None:
+                print(
+                    f"[WARNING] Missing required keys: {index}. {f_data}",
+                    file=sys.stderr)
+                time.sleep(3)
+                continue
+            if not desc:
+                print(
+                    f"[INFO] Function '{name}' lacks a 'description'. "
+                    "LLM accuracy may decrease.", file=sys.stderr)
+                f_data["descriptino"] = "No description provided."
+            if ret is None:
+                print(
+                    f"[INFO] Function '{name}' lacks a 'returns'.",
+                    file=sys.stderr)
+                f_data["returns"] = {"type": "void"}
+
+            valid_functions_data.append(f_data)
+
+        if not valid_functions_data:
+            raise ValueError(
+                "The required keys were missing from all functions."
+            )
+        functions_data = valid_functions_data
+        print("[INFO] The function definition has been loaded!")
 
         # --------------- 依存オブジェクトの構築 ---------------
         print("\x1b[2J\x1b[H\x1b[s", end="")
@@ -241,21 +285,20 @@ def main() -> None:
                 print(f"Error generating response for prompt"
                       f"'{user_prompt}': {e}", file=sys.stderr)
                 results.append({
-                    "prompt": user_prompt,
+                    "prompt": temp_prompt,
                     "error": str(e)
                 })
 
-        # 結果の保存
+        # ------------------------- 結果の保存 -------------------------
         _save_json_file(config.output, results)
-        print(f"Success: Processed {len(results)} items. "
-              f"Results saved to {config.output}", file=sys.stderr)
+        print(f"3. Success: Processed {len(results)} items. "
+              f"Results saved to {config.output}")
         program_end_time = time.time()
         t_time = program_end_time - program_start_time
         print(f"[INFO]: Total. {t_time:.4f} seconds")
 
     except Exception as e:
-        print(f"MainError: Pipeline execution failed."
-              f"{e}", file=sys.stderr)
+        print(f"MainError: Pipeline execution failed. {e}", file=sys.stderr)
         print(e.__doc__)
         exit(1)
 

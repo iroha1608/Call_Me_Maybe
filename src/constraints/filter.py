@@ -37,7 +37,7 @@ class ConstraintFilter:
         self._trie = TokenTrie()
         # 語彙からid, strをループ
         for t_id, t_str in self._vocab_items:
-            clean_str = t_str.replace("Ġ", " ")
+            clean_str = t_str.replace("Ġ", " ").replace("Ċ", "\n")
             stripped_str = clean_str.lstrip()
             self._trie.insert(clean_str, stripped_str, t_id)
 
@@ -267,9 +267,10 @@ class ConstraintFilter:
                     allowed_num = allowed_chars - {"t", "f", "n", '"'}
                     if '"' in t_str and clean_str:
                         continue
+
                     # "parameters": {"type": "int"}の時
                     if param_type in ("integer", "int"):
-                        allowed_num = allowed_chars - {'.'}
+                        allowed_num = allowed_num - {'.'}
 
                     raw_prompt = getattr(self, "_raw_user_prompt", "")
                     force_terminate = False
@@ -329,6 +330,9 @@ class ConstraintFilter:
 
                 # "parameters": {"type": "boolean"}の時
                 elif param_type in ("boolean", "bool"):
+                    if "," in clean_str or "}" in clean_str:
+                        clean_valid_ids.add(t_id)
+                        continue
                     if '"' in t_str:
                         continue
                     if clean_str:
@@ -340,6 +344,9 @@ class ConstraintFilter:
 
                 # "parameters": {"type": "null"}の時
                 elif param_type in ("null", "Null", "NULL"):
+                    if "," in clean_str or "}" in clean_str:
+                        clean_valid_ids.add(t_id)
+                        continue
                     if '"' in t_str:
                         continue
                     if clean_str:
@@ -538,7 +545,7 @@ class ConstraintFilter:
             )
             # 状況に応じてallowed_charsを上書き(主に複数引数の処理)
             allowed_chars = self._apply_schema_constraints(ctx, allowed_chars)
-            # 許可済み制御文字から空白を抜いたもの
+            # 許可済み制御文字から空白、改行を抜いたもの
             allowed_structural = {c for c in allowed_chars if c.strip()}
             # 現在のtokenを予測するため許可tokenリストをループ前に初期化
             valid_token_ids = set()

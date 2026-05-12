@@ -58,7 +58,7 @@
     }
   },
   {
-    "prompt": "replace all numbers in \\\"hello 34 i'm 233 years old\\\" with numbers",
+    "prompt": "replace all numbers in \"hello 34 i'm 233 years old\" with numbers",
     "name": "fn_substitute_string_with_regex",
     "parameters": {
       "source_string": "hello 34 i'm 233 years old",

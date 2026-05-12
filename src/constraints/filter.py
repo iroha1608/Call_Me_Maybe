@@ -1,20 +1,12 @@
 import sys
 import math
 import re
-from typing import Any
 
 from src.tokenizer import Tokenizer
-from src.models import FunctionDefinition
+from src.models import ParameterDefinition, FunctionDefinition
 
 from src.constraints.state import JSONStateTracker, FSMState, ParsedContext
 from src.constraints.trie import TokenTrie
-
-
-def _get_attr(obj: Any, key: str, default: Any = "") -> Any:
-    """dict object避け"""
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
 
 
 class ConstraintFilter:
@@ -38,7 +30,7 @@ class ConstraintFilter:
         )
         # 使用可能関数から名前の一覧を取得
         self._valid_fn_names: list[str] = [
-            _get_attr(fn, "name", "") for fn in self._available_functions
+            fn.name for fn in self._available_functions
         ]
 
         # Trie木の初期化と全語彙の登録(空間計算量 O(V * 平均長))、一度のみ実行
@@ -76,7 +68,7 @@ class ConstraintFilter:
         self._seen_root_keys: set[str] = set()
         self._available_root_keys: list[str] = []
         self._expected_param_keys: list[str] = (
-            self._get_expected_param_keys(self._target_fn_name))
+            self._get_expected_param_keys())
         self._seen_param_keys: set[str] = set()
         self._param_index: int = 0
 
@@ -94,8 +86,8 @@ class ConstraintFilter:
         max_score = -1.0
 
         for fn in self._available_functions:
-            name = _get_attr(fn, "name", "")
-            desc = _get_attr(fn, "description", "")
+            name = fn.name
+            desc = fn.description
             name_words = set(
                 re.findall(r'[a-zA-Z0-9]+', name.lower().replace("_", " "))
             )
@@ -113,30 +105,30 @@ class ConstraintFilter:
 
         return best_fn
 
-    def _get_expected_param_keys(self, selected_fn: str) -> list[str]:
+    def _get_expected_param_keys(self) -> list[str]:
         """
             プロンプトセット時、確定時に使用。
             選択された関数のparameters一覧を取得
         """
         # 使用関数からparametersを取得できた時、
         # parameters内のkey(変数名)を保存
-        if selected_fn:
+        if self._target_fn_name:
             for fn in self._available_functions:
-                if _get_attr(fn, "name") == selected_fn:
-                    params = _get_attr(fn, "parameters", {})
+                if fn.name == self._target_fn_name:
+                    params = fn.parameters
                     if isinstance(params, dict):
                         return list(params.keys())
         # 関数名が未確定、上記でkey(変数名)が取得できなかった時、
         # 全関数のkeyからparametersを取得、デッドロック回避
         all_keys: set[str] = set()
         for fn in self._available_functions:
-            params = _get_attr(fn, "parameters", {})
+            params = fn.parameters
             if isinstance(params, dict):
                 all_keys.update(params.keys())
 
         return list(all_keys)
 
-    def _get_current_function_schema(self) -> dict[str, dict[str, str]]:
+    def _get_current_function_schema(self) -> dict[str, ParameterDefinition]:
         """
             選択された関数(_target_fn_name)の"parameters"を動的に取得。
             Returnの例: {"source_string": { "type": "string"},
@@ -148,8 +140,8 @@ class ConstraintFilter:
         # 使用可能関数から1つづつループ
         for fn in self._available_functions:
             # ターゲット関数と同じ関数があった時
-            if _get_attr(fn, "name") == self._target_fn_name:
-                params = _get_attr(fn, "parameters", {})
+            if fn.name == self._target_fn_name:
+                params = fn.parameters
                 if isinstance(params, dict):
                     return params
         return {}
@@ -241,9 +233,8 @@ class ConstraintFilter:
         if not is_root_level and ctx.state == FSMState.VALUE and (
                 ctx.depth == 2):
             current_schema = self._get_current_function_schema()
-            clean_key = ctx.last_key.strip()
-            param_type = current_schema.get(
-                clean_key, {}).get("type", "string").lower()
+            param_def = current_schema.get(ctx.last_key.strip())
+            param_type = param_def.type.lower() if param_def else "string"
             val_match = re.search(r':([^:]*)$', current_text)
             if val_match:
                 current_val_str = val_match.group(1).strip(' \n\r\tĊ')
@@ -397,10 +388,8 @@ class ConstraintFilter:
             # 現在の最適関数のschemaを取得
             current_schema = self._get_current_function_schema()
             # 入力中のkeyの情報を取得 デフォルトでstr型に設定
-            param_type = (
-                current_schema.get(
-                    ctx.last_key, {}).get("type", "string").lower()
-            )
+            param_def = current_schema.get(ctx.last_key.strip())
+            param_type = param_def.type.lower() if param_def else "string"
 
         # 2-5. 語彙からid, strをループ
         for t_id, t_str in self._vocab_items:
@@ -495,7 +484,7 @@ class ConstraintFilter:
                 if name_match:
                     self._target_fn_name = name_match.group(1)
                     self._expected_param_keys = (
-                        self._get_expected_param_keys(self._target_fn_name))
+                        self._get_expected_param_keys())
                 if self._expected_param_keys:
                     first_arg = self._expected_param_keys[0]
                     inject_str = f',\n  "parameters": {{\n    "{first_arg}": '
@@ -597,7 +586,7 @@ class ConstraintFilter:
             return filtered_logits
 
         except Exception as e:
-            print(f"ConstrainFilter: Error during logit filtering. "
+            print(f"[\33[31mConstrainFilter\33[31m] Error during logit filtering. "
                   f"{e}", file=sys.stderr)
             # パイプラインのクラッシュ防止フォールバック
             return logits

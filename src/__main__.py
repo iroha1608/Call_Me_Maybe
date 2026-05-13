@@ -15,9 +15,9 @@ from src.engine import GenerationEngine
 from src.models import PromptInput, FunctionDefinition, FunctionCallResult
 
 
-def _load_json_file(file_path: str) -> Any:
+def _load_json_file(file_path: Path) -> Any:
     """JSONファイルの読み込み"""
-    path = Path(file_path)
+    path = file_path
 
     if not path.exists():
         raise FileNotFoundError(f"Required file not found: {path}")
@@ -27,16 +27,23 @@ def _load_json_file(file_path: str) -> Any:
             return json.load(f)
 
     except FileNotFoundError as e:
-        raise ValueError(f"Required file not found: {path}") from e
+        raise ValueError(f"Required file not found: {path}: {e}") from e
+
+    except UnicodeDecodeError as e:
+        raise ValueError(
+            f"File encoding error (MUST be UTF-8): {path}: {e}") from e
 
     except PermissionError as e:
         raise ValueError(f"Permission denied: {path}") from e
 
     except IsADirectoryError as e:
-        raise ValueError(f"Path is a derectory, not a file: {path}") from e
+        raise ValueError(f"Path is a directory, not a file: {path}") from e
 
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON format in {path}: {e}") from e
+
+    except OSError as e:
+        raise ValueError(f"OS error occurred while reading {path}: {e}") from e
 
 
 def _calculate_jaccard_similarity(
@@ -105,7 +112,7 @@ def _build_prompt(
         "- Words/Sentences: Copy the target text EXACTLY. "
         "Do not summarize or truncate.\n"
         "- Patterns/Symbols: If asked to replace with a symbol "
-        "(e.g., 'asterisks'), output the actual symbol (e.g, '\*'.) "
+        "(e.g., 'asterisks'), output the actual symbol (e.g, '\\*'.) "
         "If a regex pattern is needed, "
         "output the standard regex (e.g., \\d+).\n\n"
         "Available functions:\n"
@@ -118,13 +125,17 @@ def _build_prompt(
     return prompt
 
 
-def _save_json_file(file_path: str, results: Any) -> None:
+def _save_json_file(file_path: Path, results: Any) -> None:
     """出力結果をJSONに保存する関数"""
-    path = Path(file_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = file_path
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         with path.open("w", encoding="utf-8") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
+
+    except PermissionError as e:
+        raise IOError(f"Permission denied when writing to {path}: {e}") from e
+
     except IOError as e:
         raise IOError(f"Failed to write output to {path}: {e}") from e
 
@@ -171,7 +182,7 @@ def main() -> None:
         raw_functions_data = _load_json_file(config.function_definition)
         if not isinstance(raw_functions_data, list):
             raise ValueError(
-                "Function definitons file must contain a JSON array."
+                "Function definitions file must contain a JSON array."
             )
 
         valid_functions_data: list[FunctionDefinition] = []
@@ -237,11 +248,11 @@ def main() -> None:
                 user_prompt = raw_prompt.replace('"', '\\"')
 
             print(f"Prompt{index}. '{raw_prompt}'")
-            print("3", end="")
+            print("3")
             time.sleep(1.2)
-            print("2", end="")
+            print("2")
             time.sleep(1.2)
-            print("1...", end="")
+            print("1...")
             time.sleep(1.2)
 
             # 推論の直前でプロンプト固有の情報をFSMにセット
@@ -251,6 +262,7 @@ def main() -> None:
             # コンテキストを含めたプロンプトの構築
             primed_prompt = _build_prompt(user_prompt, valid_functions_data)
 
+            # 推論中のエラーは途中で止めずに次のプロンプトに継続する
             try:
                 # 推論エンジンの実行(+時間計測)
                 prompt_start_time = time.time()
@@ -258,10 +270,13 @@ def main() -> None:
                 prompt_end_time = time.time()
 
                 # 結果の記録(要件に準拠したフォーマットか判定)
+                if not isinstance(output_data, dict):
+                    raise ValueError(
+                        f"Engine returned invalid type: {type(output_data)}")
                 result_model = FunctionCallResult(
                     prompt=raw_prompt,
-                    name=output_data.get("name", "unknown"),
-                    parameters=output_data.get("parameters", {})
+                    name=output_data["name"],
+                    parameters=output_data["parameters"]
                 )
 
                 # model.dump() -> dict形式での保存、resultsに追加していく
@@ -271,12 +286,22 @@ def main() -> None:
                 print(f"Prompt{index}. '{user_prompt}'")
                 time.sleep(3)
 
-            except Exception as e:
-                print(f"Error generating response for prompt"
+            # JSON必須キー不足、型違い
+            except (KeyError, ValidationError) as e:
+                print(f"[\33[31mError\33[0m] Invalid output format for prompt "
                       f"'{user_prompt}': {e}", file=sys.stderr)
                 results.append({
                     "prompt": raw_prompt,
-                    "error": str(e)
+                    "error": f"Format error: {e}"
+                })
+
+            # ネットワーク、タイムアウト、エンジンのクラッシュ
+            except Exception as e:
+                print(f"[\33[31mError\33[0m] System failure during prompt "
+                      f"'{user_prompt}': {e}", file=sys.stderr)
+                results.append({
+                    "prompt": raw_prompt,
+                    "error": f"System error: {e}"
                 })
 
         # ------------------------- 結果の保存 -------------------------
@@ -287,11 +312,23 @@ def main() -> None:
         t_time = program_end_time - program_start_time
         print(f"[\33[32mINFO\33[0m] Total. {t_time:.4f} seconds")
 
+    # Ctrl + Cでの中断もそこまでの結果を保存する
+    except KeyboardInterrupt:
+        print("[\33[31mWarning\33[0m]: Process interrunpted by user. "
+              "Saving partial results...", file=sys.stderr)
+        if "results" in locals() and results:
+            _save_json_file(config.output, results)
+            print(f"Partial results saved to {config.output}", file=sys.stderr)
+        sys.exit(1)
+
+    # 可能な限り保存
     except Exception as e:
         print(f"[\33[31mMainError\33[0m]: Pipeline execution failed. {e}",
               file=sys.stderr)
         print(e.__doc__)
-        exit(1)
+        if "results" in locals() and results:
+            _save_json_file(config.output, results)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
@@ -299,8 +336,4 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         print(f"[\33[31mError\33[0m]: {e}", file=sys.stderr)
-        sys.exit(1)
-    except KeyboardInterrupt:
-        print("KeyboardInterruptError: "
-              "Ctrl + c has been detected.", file=sys.stderr)
         sys.exit(1)

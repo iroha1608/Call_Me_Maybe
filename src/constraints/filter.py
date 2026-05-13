@@ -593,7 +593,7 @@ class ConstraintFilter:
             return filtered_logits
 
         except Exception as e:
-            print(f"[\33[31mConstrainFilter\33[31m] Error during logit filtering. "
-                  f"{e}", file=sys.stderr)
+            print("[\33[31mConstrainFilter\33[31m] "
+                  f"Error during logit filtering. {e}", file=sys.stderr)
             # パイプラインのクラッシュ防止フォールバック
             return logits

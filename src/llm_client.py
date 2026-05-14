@@ -19,7 +19,7 @@ class LLMClient:
     def get_logits(self, input_ids: list[int]) -> list[float]:
         if not input_ids:
             raise LLMClientError(
-                "Cannot retrieve logits: input_ids is empty.") from e
+                "Cannot retrieve logits: input_ids is empty.")
         try:
             return cast(
                 list[float], self._model.get_logits_from_input_ids(input_ids)

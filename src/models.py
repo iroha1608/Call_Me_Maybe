@@ -1,5 +1,5 @@
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class PromptInput(BaseModel):
@@ -13,8 +13,22 @@ class ParameterDefinition(BaseModel):
     type: str = Field(
         ...,
         description="The data type of the parameter "
-        "(e.g., 'string', 'number')."
+        "(e.g., 'string', 'number', 'boolean', 'null')."
     )
+
+    @field_validator("type")
+    def validator_supported_types(cls, v: str) -> str:
+        supported_types = {
+            "str", "string", "num", "number",
+            "int", "integer", "bool", "boolean", "null"
+        }
+        v_lower = v.lower()
+        if v_lower not in supported_types:
+            raise ValueError(
+                f"Unsupported parameter type {v}. "
+                f"Engine currently supports: {supported_types}"
+            )
+        return v_lower
 
 
 class FunctionDefinition(BaseModel):
@@ -40,7 +54,7 @@ class FunctionDefinition(BaseModel):
 class FunctionCallResult(BaseModel):
     prompt: str = Field(
         ...,
-        description="The original natural-langage request."
+        description="The original natural-language request."
     )
     name: str = Field(
         ...,

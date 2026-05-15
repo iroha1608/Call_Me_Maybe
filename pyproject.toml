@@ -19,19 +19,19 @@ dev = [
 	"ruff",
 	"ty",
 	"pytest",
-	"llm-sdk"
+#	"llm-sdk"
 ]
 
-[tool.uv.sources]
-llm-sdk = { workspace = true }
+#[tool.uv.sources]
+#llm-sdk = { workspace = true }
 
-[tool.uv.workspace]
-members = [
-	"llm_sdk",
-]
+#[tool.uv.workspace]
+#members = [
+#"llm_sdk",
+#]
 
 [tool.mypy]
-exclude = ["^llm_sdk/"]
+# exclude = ["^llm_sdk/"]
 
 warn_return_any = true
 warn_unused_ignores = true

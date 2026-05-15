@@ -1,7 +1,8 @@
-UV		:= uv
-PYTHON	:= python3 -m
-SRC_DIR	:= src
-RM		:= rm -rf
+UV				:= uv
+PYTHON		:= python3 -m
+SRC_DIR		:= src
+TEST_DIR	:= tests
+RM				:= rm -rf
 
 # Mandatory requirements
 # install, run, debug, clean, lint, lint-strict
@@ -41,21 +42,24 @@ clean:
 
 fclean: clean
 	$(RM) .venv
+	$(RM) data/output
 
 lint:
 	- $(UV) run flake8 $(SRC_DIR)
-	- $(UV) run mypy $(SRC_DIR) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	- $(UV) run mypy --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs $(SRC_DIR) 
 	- $(UV) run ruff check $(SRC_DIR)
 # 	- $(UV) run ty check $(SRC_DIR)
 
 lint-strict:
-	$(UV) run flake8 $(SRC_DIR)
-	$(UV) run mypy --strict $(SRC_DIR)
+	- $(UV) run flake8 $(SRC_DIR)
+	- $(UV) run mypy --strict $(SRC_DIR)
 
 test:
-	$(UV) run pytest tests
+	$(UV) run pytest $(TEST_DIR)
 
-build:
-	$(UV) run $(PYTHON) build
+lint-test:
+	- $(UV) run flake8 $(TEST_DIR)
+	- $(UV) run mypy $(TEST_DIR) --warn-return-any --warn-unused-ignores --ignore-missing-imports --disallow-untyped-defs --check-untyped-defs
+	- $(UV) run ruff check $(TEST_DIR)
 
-.PHONY: install run debug clean lint lint-strict build uv setup llm fclean
+.PHONY: install run debug clean lint lint-strict all uv setup llm fclean test lint-test

@@ -1,3 +1,7 @@
+"""
+    Command-line interface argument parsing
+    and validation for the function calling application.
+"""
 import sys
 import argparse
 from pathlib import Path
@@ -6,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator, ValidationError
 
 class CLIConfig(BaseModel):
     """
-        Pathを使用しWindows、Mac/Linuxのパス形式を補完。
+        Configuration model for CLI arguments.
     """
     function_definition: Path = Field(
         default=Path("data/input/functions_definition.json"),
@@ -24,6 +28,15 @@ class CLIConfig(BaseModel):
     # ユーザーがどのフラグにどんな文字列を入れても必ず.jsonで終わるかチェック
     @field_validator("*")
     def check_json_extension(cls, v: Path) -> Path:
+        """
+            Validate that the provided path has a .json extension.
+            Args:
+                v (Path): The path to validate.
+            Returns:
+                Path: The validated path.
+            Raises:
+                ValueError: If the file does not have a .json extension.
+        """
         if v.suffix.lower() != '.json':
             raise ValueError(f"File must have a '.json' extension: {v}")
         return v
@@ -31,9 +44,16 @@ class CLIConfig(BaseModel):
 
 def parse_arguments() -> CLIConfig:
     """
-        aragparseは自動でSystemExit、
-        その他のパースはpydanticでバリデーションチェック
-    """
+        Parse command-line arguments and return a validated CLIConfig instance.
+        Returns:
+            CLIConfig: The validated configuration object
+                            containing the parsed arguments.
+            Raises:
+                ValueError:
+                    If any of the provided paths do not have a .json extension.
+                ValidationError: If the provided arguments
+                                do not conform to the CLIConfig model.
+        """
     parser = argparse.ArgumentParser(
         description="Introduction to function calling in LLMs"
     )

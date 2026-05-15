@@ -1,3 +1,5 @@
+"""Text generation engine with constraint filtering."""
+
 import json
 from typing import Any
 from time import sleep
@@ -9,15 +11,25 @@ from src.constraints.filter import ConstraintFilter
 
 class EngineError(Exception):
     """
-        エンジンの生成プロセスにおけるエラー
-        トークン枯渇、デッドロック等
+        Custom exception for errors
+        that occur during the text generation process.
     """
     pass
 
 
 class GenerationEngine:
     """
-        生成パイプラインと制約付きデコーディングのメインループ
+       Generateed text is expected to be a JSON string
+       that can be parsed into a dictionary.
+       Args:
+           llm_client (LLMClient):
+               The language model client.
+           tokenizer (Tokenizer):
+               The tokenizer for encoding and decoding tokens.
+           constraint_filter (ConstraintFilter):
+               The filter for applying constraints to the generated tokens.
+           max_new_tokens (int):
+               The maximum number of new tokens to generate.
     """
     def __init__(
         self,
@@ -32,15 +44,34 @@ class GenerationEngine:
         self._max_new_tokens = max_new_tokens
 
     def _argmax(self, logits: list[float]) -> int:
+        """
+            Get the index of the maximum value in the logits list.
+            Args:
+                logits (list[float]):
+                    A list of logits corresponding to token probabilities.
+            Returns:
+                int: The index of the token with the highest logit score.
+            Raises:
+                EngineError: If the logits list is empty.
+        """
         if not logits:
             raise EngineError("Empty logits list provided to argmax.")
         return logits.index(max(logits))
 
     def generate(self, prompt: str) -> dict[str, Any]:
         """
-            prompt -> token化 -> InputIDs -> LLM -> Logits
-            -> 制約付きフィルタリング -> Token選択 -> decode
-            自己回帰性ループ
+            Generate text based on the given prompt, applying constraints
+            to the token generation process. The generated text is expected
+            to be a JSON string that can be parsed into a dictionary.
+            Args:
+                prompt (str): The input prompt to guide the text generation.
+            Returns:
+                dict[str, Any]: The parsed JSON object resulting from the
+                                generated text.
+            Raises:
+                EngineError: If the maximum number of tokens is reached without
+                        generating valid JSON, or if the resulting text cannot
+                        be parsed as JSON.
         """
         input_ids: list[int] = self._tokenizer.encode(prompt)
         token_ids: list[int] = []

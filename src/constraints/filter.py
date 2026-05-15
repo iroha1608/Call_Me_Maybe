@@ -1,3 +1,12 @@
+"""
+    ConstraintFilter class for enforcing JSON structure
+    and schema during token generation.
+    This class implements a pushdown automaton (PDA)
+    to perform constrained decoding,
+    manipulating the probability distribution (logits) output
+    by the language model to filter out tokens that violate
+    JSON syntax and schema constraints.
+"""
 import sys
 import math
 import re
@@ -11,16 +20,29 @@ from src.constraints.trie import TokenTrie
 
 class ConstraintFilter:
     """
-        プッシュダウンオートマトン(PDA)
-        制約付きデコーディングを行う。
-        LLMが出力した確率分布(Logits)を操作、
-        Json構文、スキーマに違反するtokenをフィルタリングするクラス。
+        ConstraintFilter enforces JSON structure and schema constraints
+        during token generation by manipulating the logits output
+        by the language model. It uses a pushdown automaton (PDA)
+        to track the current state of the generated text and applies
+        filters to ensure that the output adheres to the expected JSON format
+        and the schema defined by the available functions and their parameters.
     """
     def __init__(
         self,
         tokenizer: Tokenizer,
         available_functions: list[FunctionDefinition]
     ) -> None:
+        """
+            Initialize the ConstraintFilter
+            with a tokenizer and available functions.
+            Args:
+                tokenizer (Tokenizer):
+                    The tokenizer for encoding and decoding tokens.
+                available_functions (list[FunctionDefinition]):
+                    A list of available function definitions that the generated
+                    output should adhere to. Each function definition includes
+                    the function name, description, and parameters.
+        """
         self._tokenizer = tokenizer
         self._available_functions = available_functions
 
@@ -45,8 +67,13 @@ class ConstraintFilter:
 
     def set_user_prompt(self, user_prompt: str) -> None:
         """
-            1個のプロンプトにつき1回のみ呼び出し。
-            標的関数の再計算とFSMの差分キャッシュをリセットする。
+            Set the user prompt and initialize the state tracker and internal
+            variables for tracking the generation process.
+            This method should be called at the beginning of each generation
+            session to reset the state and prepare for the new prompt.
+            Args:
+                user_prompt (str):
+                    The natural language prompt provided by the user.
         """
         # 最適な関数の取得
         self._target_fn_name: str = (
@@ -74,9 +101,16 @@ class ConstraintFilter:
 
     def _calculate_target_function(self, user_prompt: str) -> str:
         """
-            プロンプトセット時に使用。
-            ユーザープロンプトと関数定義間のJaccard係数を計算し、
-            意味論的に最も関連性の高い関数名を利用可能にする。
+            Calculate the most relevant function name based on the user prompt
+            using Jaccard similarity between the prompt and the function names
+            and descriptions. This helps to guide the generation towards the
+            most appropriate function based on the user's input.
+            Args:
+                user_prompt (str):
+                    The natural language prompt provided by the user.
+            Returns:
+                str:
+                    The name of the most relevant function based on the prompt.
         """
         if not user_prompt:
             return ""
@@ -107,8 +141,10 @@ class ConstraintFilter:
 
     def _get_expected_param_keys(self) -> list[str]:
         """
-            プロンプトセット時、確定時に使用。
-            選択された関数のparameters一覧を取得
+            Get the expected parameter keys for the target function.
+            Returns:
+                list[str]:
+                    A list of expected parameter keys for the target function.
         """
         # 使用関数からparametersを取得できた時、
         # parameters内のkey(変数名)を保存
@@ -130,9 +166,10 @@ class ConstraintFilter:
 
     def _get_current_function_schema(self) -> dict[str, ParameterDefinition]:
         """
-            選択された関数(_target_fn_name)の"parameters"を動的に取得。
-            Returnの例: {"source_string": { "type": "string"},
-                         "regex":{ "type": "string"}}
+             Get the parameter schema for the currently targeted function.
+             Returns:
+                dict[str, ParameterDefinition]:
+                    The parameter schema for the targeted function.
         """
         # 最適な関数がない場合
         if not self._target_fn_name:
@@ -148,8 +185,9 @@ class ConstraintFilter:
 
     def _get_available_root_keys(self) -> list[str]:
         """
-            root keyの順番を強制("name"->"parameters")。
-            現在強制キューで管理。
+            Get the available root keys for the current context.
+            Returns:
+                list[str]: A list of available root keys.
         """
         if "name" not in self._seen_root_keys:
             return ["name"]
@@ -164,8 +202,23 @@ class ConstraintFilter:
         allowed_chars: set[str]
     ) -> set[str]:
         """
-            進行状況に応じて、許可する文字を上書き。
-            現在複数引数の時に継続許可、禁止で使用。
+            Apply schema constraints to the allowed characters based on the
+            current context of the generated text. This method enforces the
+            required structure of the JSON output and the expected parameters
+            for the targeted function, dynamically adjusting the allowed
+            characters to guide the generation towards valid JSON that adheres
+            to the schema.
+            Args:
+                ctx (ParsedContext):
+                    The current parsed context of the generated text, including
+                    information about the current state, depth, last key, and
+                    seen keys.
+                allowed_chars (set[str]):
+                    The initial set of allowed characters based on the current
+                    state and depth.
+            Returns:
+                set[str]: The adjusted set of allowed characters after applying
+                schema constraints.
         """
         is_root_level = (ctx.depth == 1)
 
@@ -214,9 +267,25 @@ class ConstraintFilter:
         valid_token_ids: set[int], allowed_chars: set[str], current_text: str
     ) -> set[int]:
         """
-            文字列外の時、不要なtoken排除、型制約の適用。
-            必要な構文文字のtoken_idのみ許可する。
-            現在メインは数字の出力。
+            Filter out token IDs that correspond to structural characters
+            that are not allowed in the current context based on
+            the JSON structure and schema constraints.
+            This method ensures that tokens that would violate the JSON syntax
+            or the expected structure of the output are not allowed,
+            guiding the generation towards valid JSON output.
+            Args:
+                ctx (ParsedContext):
+                    The current parsed context of the generated text, including
+                    information about the current state, depth, last key, and
+                    seen keys.
+                valid_token_ids (set[int]):
+                    The set of valid token IDs to filter.
+                allowed_chars (set[str]):
+                    The set of allowed characters based on the current context.
+                current_text (str):
+                    The current text being generated.
+            Returns:
+                set[int]: The filtered set of valid token IDs.
         """
         # 許可されていない構造文字セット
         dis_allowed_structural = (
@@ -360,8 +429,21 @@ class ConstraintFilter:
 
     def _filter_in_string_tokens(self, ctx: ParsedContext) -> set[int]:
         """
-            文字列内の時、不要なtoken排除。
-            関数名、引数の中身がstringの時のメイン処理。
+            Filter out token IDs
+            that are not valid in the current in-string context
+                based on the JSON structure and schema constraints.
+            This method ensures that tokens that would violate the expected
+            structure of the JSON output or the expected parameters for the
+            targeted function are not allowed when the generation is currently
+            within a string value, guiding the generation towards valid JSON
+            output that adheres to the schema.
+            Args:
+                ctx (ParsedContext):
+                    The current parsed context of the generated text, including
+                    information about the current state, depth, last key, and
+                    seen keys.
+            Returns:
+                set[int]: The filtered set of valid token IDs.
         """
         valid_token_ids = set()
         target_strings: list[str] = []
@@ -457,8 +539,28 @@ class ConstraintFilter:
         self, logits: list[float], current_text: str
     ) -> list[float]:
         """
-            制約付きデコーディングのメインロジック。
-            状態遷移(FSM)アルゴリズム、 プッシュダウンオートマトン(PDA)。
+            Filter the logits output by the language model based on the current
+            context of the generated text, enforcing JSON structure and schema
+            constraints. This method manipulates the logits to set the
+            probabilities of tokens that would violate the constraints to
+            negative infinity, effectively preventing the model from generating
+            invalid JSON output. It also handles special cases such as forcing
+            certain tokens when specific conditions are met
+            (e.g., after generating a function name
+            or when certain keys are present).
+            Args:
+                logits (list[float]):
+                    The original logits output by the language model
+                    for the next token prediction.
+                current_text (str):
+                    The current text generated so far,
+                    which is used to determine the context
+                    and apply the appropriate constraints.
+            Returns:
+                list[float]:
+                    The filtered logits after applying the constraints,
+                    where invalid tokens have their probabilities
+                    set to negative infinity.
         """
         try:
             # --------------- 強制キューによるバイアス ---------------

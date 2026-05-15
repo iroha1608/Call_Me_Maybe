@@ -1,9 +1,24 @@
+"""
+FSMState is an enumeration that represents the states of
+a finite state machine (FSM) used for parsing JSON.
+LoopState is a dataclass that holds the current state of the parsing loop,
+including the current string being parsed, the depth of nesting,
+whether we are currently inside a string, and other relevant information.
+ParsedContext is a dataclass that represents the context of the parsed JSON
+at any given point, including the current string, the FSM state, depth,
+and other details. JSONStateTracker is a class that manages the state of JSON
+parsing, allowing us to determine the current state based on the input text
+and providing allowed characters for each state.
+"""
 from enum import Enum
 from dataclasses import dataclass, field
 
 
 class FSMState(str, Enum):
-    """Json解析用オートマトンの状態を表す。"""
+    """
+        FSMState is an enumeration that represents the states of
+        a finite state machine (FSM) used for parsing JSON.
+    """
     BEGIN = "BEGIN"
     KEY = "KEY"
     COLON = "COLON"
@@ -14,7 +29,12 @@ class FSMState(str, Enum):
 
 @dataclass(frozen=True)
 class LoopState:
-    """文字単位のパースループを回すための内部状態"""
+    """
+        LoopState is a dataclass that holds the current state of
+        the parsing loop, including the current string being parsed,
+        the depth of nesting, whether we are currently inside a string,
+        and other relevant information.
+    """
     current_string: str = ""
     depth:  int = 0
     in_string: bool = False
@@ -27,7 +47,11 @@ class LoopState:
 
 @dataclass
 class ParsedContext:
-    """最終的にdetermine_current_stateが返す情報"""
+    """
+        ParsedContext is a dataclass that represents the context of
+        the parsed JSON at any given point, including the current string,
+        the FSM state, depth, and other details.
+    """
     # 現在の状態
     current_string: str
     state: FSMState
@@ -40,21 +64,34 @@ class ParsedContext:
 
 class JSONStateTracker:
     """
-        JSONの生成状態を追跡、管理するクラス。
+        JSONStateTracker is a class that manages the state of JSON parsing,
+        allowing us to determine the current state based on the input text
+        and providing allowed characters for each state.
     """
     def __init__(self) -> None:
+        """Initialize the JSONStateTracker by resetting its state. """
         self.reset()
 
     def reset(self) -> None:
-        """新しいプロンプトが来た時に初期化"""
+        """Reset the state of the JSONStateTracker to its initial values. """
         self._cached_text = ""
         self._cached_loop_state = LoopState()
         # 開始地点
 
     def determine_current_state(self, current_text: str) -> ParsedContext:
         """
-            文字列を線形走査し現在の文脈を抽出する。
-            生成済みテキスト長(N)に対して1回のループ処理で状態を判定。
+            Determine the current state of
+            JSON parsing based on the input text.
+            This method uses a finite state machine (FSM) approach to
+            analyze the structure of the JSON being parsed,
+            including the depth of nesting, whether we are inside a string,
+            and the context of keys and values.
+            Args:
+                current_text (str): The current text being parsed as JSON.
+            Returns:
+                ParsedContext: An object containing the current string,
+                FSM state, depth, and other relevant details
+                about the parsing context.
         """
         if not current_text:
             self.reset()
@@ -122,7 +159,20 @@ class JSONStateTracker:
         )
 
     def _run_fsm_loop(self, state: LoopState, chunk: str) -> LoopState:
-        """文字列チャンクを1文字ずつパース、新しい内部情報を返す。"""
+        """
+            Run the finite state machine (FSM) loop to analyze the input chunk
+            of text and update the parsing state accordingly. This method
+            processes each character in the input chunk, updating the depth
+            of nesting, whether we are inside a string, and other relevant
+            information based on the structure of the JSON being parsed.
+            Args:
+                state (LoopState):
+                    The current state of the FSM before processing the chunk.
+                chunk (str): The new chunk of text to be processed.
+            Returns:
+                LoopState:
+                    The updated state of the FSM after processing the chunk.
+        """
         # ループ内で更新するのでローカルで保存。
         depth = state.depth
         in_string = state.in_string
@@ -188,7 +238,20 @@ class JSONStateTracker:
         )
 
     def get_allowed_characters(self, state: FSMState, depth: int) -> set[str]:
-        """基本的なJson構文に基づいて許可する文字セットを取得"""
+        """
+            Get the set of allowed characters based on the current
+            FSM state and depth of nesting.
+            This method defines the valid characters that can be generated
+            by the LLM at each state of the JSON parsing process,
+            helping to constrain the output to valid JSON structures.
+            Args:
+                state (FSMState): The current state of the FSM.
+                depth (int):
+                    The current depth of nesting in the JSON structure.
+            Returns:
+                set[str]: A set of characters that are allowed to be generated
+                by the LLM based on the current FSM state and depth of nesting.
+        """
         if state == FSMState.BEGIN:
             return {"{"}
         elif state == FSMState.KEY:
@@ -201,12 +264,12 @@ class JSONStateTracker:
                 return {
                     '"', "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
                     ".", "-", "e", "E", "t", "f", "n",
-                    ",", "}", "]", "\n"
+                    ",", "}", "\n"
                 }
             return {
                 '"', "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
                 ".", "-", "e", "E", "t", "f", "n",
-                "{", "[", ",", "}", "]", "\n"
+                "{", ",", "}", "\n"
             }
         elif state == FSMState.COMMA_OR_END:
             return {",", "}", "]"}

@@ -1,15 +1,36 @@
+"""
+    Tokenizer module that provides functionality to encode
+    and decode text using a vocabulary file.
+    The Tokenizer class interfaces with the LLMClient
+    to perform encoding and decoding operations,
+    while also managing the vocabulary loaded from a JSON file.
+"""
 import json
 from src.llm_client import LLMClient, LLMClientError
 
 
 class TokenizerError(Exception):
-    """Tokenizer、語彙処理に関する独自例外"""
+    """Custom exception for errors that occur during tokenization processes."""
     pass
 
 
 class Tokenizer:
-
+    """
+        Tokenizer that interfaces with the LLMClient to encode and decode text.
+        It also loads the vocabulary from a JSON file provided
+        by the LLMClient.
+    """
     def __init__(self, llm_client: LLMClient) -> None:
+        """
+            Initialize the Tokenizer
+                    with the given LLMClient and load the vocabulary.
+            Args:
+                llm_client (LLMClient):
+                    The language model client to interface with.
+            Raises:
+                TokenizerError:
+                    If there is an error while loading the vocabulary.
+        """
         self._llm_client = llm_client
 
         try:
@@ -24,6 +45,16 @@ class Tokenizer:
         self._load_vocabulary()
 
     def _load_vocabulary(self) -> None:
+        """
+            Loads the vocabulary from the JSON file.
+            The vocabulary file is expected to be a JSON object
+            where keys are tokens (strings)
+            and values are their corresponding token IDs (integers).
+            Raises:
+                TokenizerError:
+                    If the vocabulary file is not found, is not a valid JSON,
+                    or if there is any error during the loading process.
+        """
         try:
             with open(self._vocab_path, "r",  encoding="utf-8") as f:
                 vocab_data = json.load(f)
@@ -51,6 +82,15 @@ class Tokenizer:
             raise TokenizerError("Vocabulary loading failed.") from e
 
     def encode(self, prompt: str) -> list[int]:
+        """
+            Encodes a string into a list of token IDs.
+            Args:
+                prompt (str): The input string to encode.
+            Returns:
+                list[int]: The list of token IDs.
+            Raises:
+                TokenizerError: If the encoding process fails.
+        """
         try:
             return self._llm_client.encode(prompt)
 
@@ -58,6 +98,15 @@ class Tokenizer:
             raise TokenizerError("Encoding process failed.") from e
 
     def decode(self, token_ids: list[int]) -> str:
+        """
+            Decodes a list of token IDs back into a string.
+            Args:
+                token_ids (list[int]): The list of token IDs to decode.
+            Returns:
+                str: The decoded string.
+            Raises:
+                TokenizerError: If the decoding process fails.
+        """
         try:
             return self._llm_client.decode(token_ids)
 

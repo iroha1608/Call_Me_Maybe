@@ -1,5 +1,14 @@
+"""
+    Main module for the function calling pipeline.
+    This module orchestrates the entire process of reading input prompts,
+    validating them, loading function definitions, initializing the necessary
+    components (LLM client, tokenizer, constraint filter,
+                                                    and generation engine),
+    and executing the generation process for each prompt.
+    It also handles the saving of results
+    and error handling throughout the pipeline.
+"""
 import sys
-# import os
 import json
 import time
 import re
@@ -16,7 +25,20 @@ from src.models import PromptInput, FunctionDefinition, FunctionCallResult
 
 
 def _load_json_file(file_path: Path) -> Any:
-    """JSONファイルの読み込み"""
+    """
+        Load a JSON file and return its contents.
+        Args:
+            file_path (Path): The path to the JSON file.
+        Returns:
+            Any: The contents of the JSON file.
+        Raises:
+            FileNotFoundError: If the file does not exist.
+            UnicodeDecodeError: If the file cannot be decoded as UTF-8.
+            PermissionError: If the file cannot be accessed due to permissions.
+            IsADirectoryError: If the path is a directory, not a file.
+            json.JSONDecodeError: If the file is not valid JSON.
+            OSError: For other OS-related errors.
+    """
     path = file_path
 
     if not path.exists():
@@ -49,7 +71,16 @@ def _load_json_file(file_path: Path) -> Any:
 def _calculate_jaccard_similarity(
     user_prompt: str, fn_def: FunctionDefinition
 ) -> float:
-    """プロンプトと関数定義間のJaccard係数を計算する。"""
+    """
+        Calculate the Jaccard similarity
+        between the user prompt and a function definition.
+        Args:
+            user_prompt (str): The user's input prompt.
+            fn_def (FunctionDefinition):
+                The function definition to compare against.
+        Returns:
+            float: The Jaccard similarity score (0.0 to 1.0).
+    """
     # 正規表現で英数字のみ抽出
     prompt_words = set(re.findall(r'[a-zA-Z0-9_]+', user_prompt.lower()))
     name = fn_def.name
@@ -69,7 +100,16 @@ def _calculate_jaccard_similarity(
 def _build_prompt(
     user_prompt: str, function_schema: list[FunctionDefinition]
 ) -> str:
-    """LLMに渡すメインプロンプトの生成。"""
+    """
+        Build the prompt for the LLM
+        based on the user input and available function definitions.
+        Args:
+            user_prompt (str): The user's input prompt.
+            function_schema (list[FunctionDefinition]):
+                A list of available function definitions.
+        Returns:
+            str: The constructed prompt to be sent to the LLM.
+    """
     scored_functions = [
         (fn, _calculate_jaccard_similarity(user_prompt, fn))
         for fn in function_schema
@@ -126,7 +166,16 @@ def _build_prompt(
 
 
 def _save_json_file(file_path: Path, results: Any) -> None:
-    """出力結果をJSONに保存する関数"""
+    """
+        Save results to a JSON file.
+        Args:
+            file_path (Path): The path to the output JSON file.
+            results (Any): The data to be saved in JSON format.
+        Raises:
+            PermissionError:
+                If there is a permission issue when writing to the file.
+            IOError: If there is an error writing to the file.
+    """
     path = file_path
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,6 +190,7 @@ def _save_json_file(file_path: Path, results: Any) -> None:
 
 
 def main() -> None:
+    """Main function to execute the function calling pipeline."""
     program_start_time = time.time()
     print("\x1b[2J\x1b[H\x1b[s", end="")
     print("1. ...")

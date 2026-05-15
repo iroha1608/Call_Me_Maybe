@@ -1,9 +1,14 @@
+"""
+Trie implementation for efficient token matching in the Call Me Maybe project.
+"""
+
+
 class TrieNode:
     """
-        Trie木(プレフィックス木)を構成するnode。
-        空間計算量(メモリ) -> 時間計算量をO(1)~O(L)に最適化。
-        接頭辞としてこのノードを通過する全token_idを保持、
-        実行時の深さ優先探索(DFS)のオーバーヘッドを排除する。
+        A node in the Trie data structure used for storing token strings.
+        Each node contains a dictionary of child nodes and a set of token IDs
+        that correspond to the tokens
+        that can be formed from the path to this node.
     """
     # __slots__を定義->__dict__での属性管理がされない->メモリの節約
     __slots__ = ["children", "token_ids"]
@@ -16,9 +21,15 @@ class TrieNode:
 
 class TokenTrie:
     """
-        自己回帰生成における語彙走査を圧縮するデータ構造。
+        Trie structure to store and match token strings for both clean
+        and stripped forms.
     """
     def __init__(self) -> None:
+        """
+            Initializes the TokenTrie with separate root nodes for clean and
+            stripped strings, a hashmap for first character indexing, and a
+            set for whitespace token IDs.
+        """
         # clean_strのroot node
         self.clean_root = TrieNode()
         # stripped_strのroot node
@@ -32,21 +43,31 @@ class TokenTrie:
         self, clean_str: str, stripped_str: str, token_id: int
     ) -> None:
         """
-            ConstraintFilterの初期化時に一度だけループで実行。ツリーの構築。
-            最初の文字ごとにtokne_idを管理、あらかじめ目次を作っておく。
-            階層は深くしない1文字目のハッシュマップ。
+            Inserts a token into the Trie based on its clean and stripped
+            string forms.
+            Args:
+                clean_str (str): The clean string representation of the token.
+                stripped_str (str):
+                    The stripped string representation of the token.
+                token_id (int): The unique identifier for the token.
+            Raises:
+                ValueError:
+                    If either clean_str or stripped_str is not a string,
+                    or if both are empty strings.
         """
-        # clean_str = 全語彙を.replace("Ġ", " ")。
-        # stripped_str = 前語彙を.lstrip()。
-        # 空白をstrip()した文字だけ無い文字=スペースのtoken。
+        if not isinstance(clean_str, str) or not isinstance(stripped_str, str):
+            raise (
+                f"Invalid token string type for ID {token_id}. Must be string."
+            )
+        if not clean_str and not stripped_str:
+            return
+
         if clean_str and not stripped_str:
             self.whitespace_token_ids.add(token_id)
 
         elif stripped_str:
-            # 文字列のprefixの文字が辞書に無い時。
             first_char = stripped_str[0]
             if first_char not in self.first_char_index:
-                # prefixの文字から始まるtoken_idのリストを作成。
                 self.first_char_index[first_char] = set()
             self.first_char_index[first_char].add(token_id)
 
@@ -54,9 +75,7 @@ class TokenTrie:
         if clean_str:
             node = self.clean_root
             for char in clean_str:
-                # もし文字がroot nodeの中にない時
                 if char not in node.children:
-                    # prefixTrieNodeを複製
                     node.children[char] = TrieNode()
                 node = node.children[char]
                 node.token_ids.add(token_id)
@@ -73,8 +92,16 @@ class TokenTrie:
     def get_token_with_prefix(
         self, prefix: str, use_stripped: bool = False
     ) -> set[int]:
-        """指定したprefixで始まる全token_idをO(L)で取得"""
-        if not prefix:
+        """
+            Retrieves the set of token IDs that match a given prefix string.
+            Args:
+                prefix (str): The prefix string to match against the Trie.
+                use_stripped (bool):
+                    Whether to use the stripped Trie for matching.
+            Returns:
+                set[int]: A set of token IDs that match the given prefix.
+        """
+        if not prefix or not isinstance(prefix, str):
             return set()
 
         node = self.stripped_root if use_stripped else self.clean_root

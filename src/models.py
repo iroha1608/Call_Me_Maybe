@@ -1,8 +1,19 @@
+"""
+    This module defines the data models for the Call Me Maybe engine,
+    including the input prompt, function definitions,
+    and the results of function calls.
+    These models are used for validating and structuring the data
+    that flows through the engine, ensuring that the inputs
+    and outputs conform to the expected formats and types.
+"""
+
+
 from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
 class PromptInput(BaseModel):
+    """The input model for a natural language prompt."""
     prompt: str = Field(
         ...,
         description="The natural language prompt provided by the user."
@@ -10,6 +21,7 @@ class PromptInput(BaseModel):
 
 
 class ParameterDefinition(BaseModel):
+    """The definition of a function parameter."""
     type: str = Field(
         ...,
         description="The data type of the parameter "
@@ -18,6 +30,15 @@ class ParameterDefinition(BaseModel):
 
     @field_validator("type")
     def validator_supported_types(cls, v: str) -> str:
+        """
+            Validate that the provided type is supported by the engine.
+            Args:
+                v (str): The data type to validate.
+            Returns:
+                str: The validated data type in lowercase.
+            Raises:
+                ValueError: If the provided type is not supported.
+        """
         supported_types = {
             "str", "string", "num", "number",
             "int", "integer", "bool", "boolean", "null"
@@ -32,6 +53,7 @@ class ParameterDefinition(BaseModel):
 
 
 class FunctionDefinition(BaseModel):
+    """The definition of a function that can be called by the engine."""
     name: str = Field(
         ...,
         description="The name of the function."
@@ -52,6 +74,10 @@ class FunctionDefinition(BaseModel):
 
 
 class FunctionCallResult(BaseModel):
+    """
+        The result of a function call, including the original prompt,
+        the name of the function called, and the extracted parameters.
+    """
     prompt: str = Field(
         ...,
         description="The original natural-language request."

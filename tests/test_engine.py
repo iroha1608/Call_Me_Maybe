@@ -46,6 +46,7 @@ class TestGenerationEngine:
                 return '{"a": 1'
             elif len(t_ids) == 3:
                 return '{"name": "test", "parameters": {}}'
+            return ""
 
         tokenizer.decode.side_effect = mock_decode
         engine = GenerationEngine(

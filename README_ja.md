@@ -3,7 +3,7 @@
 <table>
 	<thead>
     	<tr>
-      		<th style="text-align:center"><a href="README.md">English</a></th>
+      		<th style="text-align:center"><a href="README.md">英語</a></th>
       		<th style="text-align:center">日本語</th>
     	</tr>
   	</thead>
@@ -109,7 +109,6 @@ make lint-strict
 - ソリューションの精度、速度、信頼性について  
 	0.5Bパラメータの軽量モデルですが、エッジケースでもほぼ100%の精度でJSON出力を生成します。  
 	また、LLMの推論をパラメーター内部に絞り、必須構文に関する箇所を強制キューで管理することで、LLMの推論能力を最大限に活用しています。  
-- また、
 
 ### 3-4. 直面した課題
 
@@ -123,6 +122,7 @@ make lint-strict
 - 実装をどのように検証したか  
 	通常ケースとエッジケース(空文字、特殊文字や長大な数字、nullやbooleanの対応)に分割し、それぞれに対してテストを実施しました。　　
 - ボーナスであるトークンの生成プロセスを描画することでデバッグもしやすくしました。  
+- また、こちらもボーナスであるpytestとunittest.mockを使用したユニットテスト群を構築し、外部I/OやLLM推論をモック化することで、実装の正確性を検証しました。  
 
 ### 3-6. 使用例
 
@@ -136,11 +136,11 @@ make lint-strict
 
 ![image2](./.images/example_function.png)  
 
-- 同じく、プロンプトは下記のようにして指定します。  
+- 同じく、プロンプトは下記のように指定します。  
 
 ![image3](./.images/example_prompt.png)  
 
-- 出力ファイル例  
+- 出力ファイル例は以下のようになります。  
 
 ![image4](./.images/example_output.png)
 

@@ -131,30 +131,9 @@ def _build_prompt(
     # Main Prompt
     prompt = (
         "<|im_start|>system\n"
-        "You are a strict Data Extraction Engine.\n"
-        "Your ONLY role is to act as a copy-and-paste tool between "
-        "the user's text and the JSON parameters.\n\n"
-        "[Execution Steps]\n"
-        "Step 1 (Read): Read the available functions and "
-        "the user's input text.\n"
-        "Step 2 (Select): Select the correct function and read its required "
-        "parameters and types.\n"
-        "Step 3 (Extract): Find the exact information in the user's text "
-        "that matches each parameter.\n"
-        "Step 4 (Copy): Copy the extracted information directly "
-        "into the JSON format.\n\n"
-        "[Extraction Rules]\n"
-        "- Numbers: Extract exact numbers from the text. "
-        "Never invent, calculate, or output default numbers like 0 or -1.\n"
-        "Even if the parameter type is 'number', YOU must determine whether "
-        "it should be an integer or a float based on the context. "
-        "Do not add unnecessary decimals.\n"
-        "- Words/Sentences: Copy the target text EXACTLY. "
-        "Do not summarize or truncate.\n"
-        "- Patterns/Symbols: If asked to replace with a symbol "
-        "(e.g., 'asterisks'), output the actual symbol (e.g, '\\*'.) "
-        "If a regex pattern is needed, "
-        "output the standard regex (e.g., \\d+).\n\n"
+        "You are a strict data extraction engine. "
+        "Extract exact values from the user's input "
+        "based on the provided functions.\n"
         "Available functions:\n"
         f"{markdown_schema}"
         "<|im_end|>\n"
@@ -193,7 +172,7 @@ def main() -> None:
     """Main function to execute the function calling pipeline."""
     program_start_time = time.time()
     print("\x1b[2J\x1b[H\x1b[s", end="")
-    print("1. ...")
+    print("1. \33[1mLet's get the “Call Me Maybe” program started\33[0m")
     try:
         # -------------------- 外部データの読み込み --------------------
         # CLIから指定された(またはデフォルトの)各データの読み込み->config
@@ -229,7 +208,8 @@ def main() -> None:
 
         # -------------------- 関数定義のバリデーション --------------------
         # 関数データの読み込み->raw_functions_data
-        raw_functions_data = _load_json_file(config.function_definition)
+        raw_functions_data: list[dict[str, Any]] = (
+            _load_json_file(config.functions_definition))
         if not isinstance(raw_functions_data, list):
             raise ValueError(
                 "Function definitions file must contain a JSON array."
@@ -282,8 +262,8 @@ def main() -> None:
         time.sleep(0.3)
 
         # -------------------- プロンプトの読み込み --------------------
-        print("3. Starting processing of "
-              f"{len(valid_prompts_data)} prompts...")
+        print("3. \33[1mStarting processing of "
+              f"{len(valid_prompts_data)} prompts...\33[0m")
 
         results: list[dict[str, Any]] = []
 
@@ -356,8 +336,8 @@ def main() -> None:
 
         # ------------------------- 結果の保存 -------------------------
         _save_json_file(config.output, results)
-        print(f"4. Success: Processed {len(results)} items. "
-              f"Results saved to {config.output}")
+        print(f"4. \33[1mSuccess: Processed {len(results)} items. "
+              f"Results saved to {config.output}\33[0m")
         program_end_time = time.time()
         t_time = program_end_time - program_start_time
         print(f"[\33[32mINFO\33[0m] Total. {t_time:.4f} seconds")

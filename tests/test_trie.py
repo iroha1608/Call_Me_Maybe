@@ -1,4 +1,7 @@
-"""Unit tests for the TokenTrie class in src.constraints.trie."""
+"""
+    Unit tests for the TokenTrie class in src.constraints.trie.
+    # type: ignore[arg-type]
+"""
 import pytest
 from src.constraints.trie import TokenTrie
 

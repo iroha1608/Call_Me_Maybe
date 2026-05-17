@@ -4,7 +4,7 @@
 	<thead>
     	<tr>
       		<th style="text-align:center">English</th>
-      		<th style="text-align:center"><a href="README_ja.md">日本語</a></th>
+      		<th style="text-align:center"><a href="README_ja.md">Japanese</a></th>
     	</tr>
   	</thead>
 </table>
@@ -34,8 +34,8 @@
 	4. [Visualization of the Generation Process](#4-4-Visualization-of-the-Generation-Process)
 	5. [Demonstration of How Encoding and Decoding Integrate with Constrained Decoding](#4-5-Demonstration-of-How-Encoding-and-Decoding-Integrate-with-Constrained-Decoding)
 5. [🌈Resources](#5-Resources)
-	1. [URL](#4-1-URL)
-	2. [AI Usage](#4-2-AI-Usage)
+	1. [URL](#5-1-URL)
+	2. [AI Usage](#5-2-AI-Usage)
   
 
 ## 💡1. Description
@@ -108,12 +108,16 @@ make lint-strict
     Furthermore, by confining the LLM’s inference to within the parameters and managing mandatory syntax elements via a forced queue, we maximize the LLM’s inference capabilities.  
 
 ### 3-4.Challenges faced
-- Since the `type` specified in the assignment was `number` rather than `int` or `float`, the required output format was unclear, and I was unable to implement it.
-- When changing the JSON structuring to be managed via a forced queue, I was concerned that this might amount to hard-coding. However, since the specified items—such as “name,” “parameters,” and “type”—must be retrieved regardless, I determined that the key objective here was to maximize the understanding of coding and the LLM’s reasoning capabilities within the given constraints, and thus implemented this approach.  
+- Since the `type` specified in the assignment was `number` rather than `int` or `float`, the required output format was unclear, and I was unable to handle it. I decided to leave this aspect to the LLM's inference.  
+- When switching from JSON structuring to management via a forced queue, I worried whether this would amount to hard-coding. However, since the specified items—such as “name,” “parameters,” and “type”—must be retrieved regardless, I determined that the priority here was understanding the coding constraints. Given the challenges of retrieving the aforementioned values, I concluded it would be best to fully leverage the LLM’s reasoning capabilities and implemented this approach.  
+- Regarding the handling of ‘\“’, there were instances where, if the prompt contained ‘\”’, the escape sequence was consumed when passed to the LLM, causing it to output double quotes and breaking the FSM. To address this, I implemented a fix where, if the prompt contains ‘\"’, it is escaped before being passed to the LLM.  
+- During implementation, we encountered an infinite loop where the output would repeat “0000...” when generating numerical values. This occurred because the tokenizer was treating line breaks as “Ċ” when adding spaces and line breaks to the trie tree, preventing them from being properly added to the cache.  
 
 ### 3-5.Testing strategy
-- How we verified the implementation  
-  We divided the cases into normal cases and edge cases (empty strings, special characters, very long numbers, and handling of null and boolean values), and ran tests for each.　
+- How the implementation was verified  
+    We divided the cases into normal cases and edge cases (empty strings, special characters, very long numbers, and handling of null and boolean values) and ran tests for each.　　
+- As a bonus, we made debugging easier by visualizing the token generation process.  
+- Also, as another bonus, we built a set of unit tests using pytest and unittest.mock. By mocking external I/O and LLM inference, we verified the accuracy of the implementation.  
 
 ### 3-6.Example usage
 
@@ -131,7 +135,7 @@ to execute the specified file.
 
 ![image3](./.images/example_prompt.png)  
 
-- Sample output file  
+- The output file will look like this.  
 
 ![image4](./.images/example_output.png)
 
@@ -145,17 +149,14 @@ to execute the specified file.
     - Demonstration of how to integrate encoding and decoding with constrained decoding
 	
 ### 4-1. Advanced Error Recovery Mechanisms
-
-- A mechanism to fall back to the original logits when filtering with ConstraintFilter crashes
-- Try-except control flow that swallows parsing errors and continues generation even with incomplete JSON strings
-- Design that prevents the entire process from crashing even if an error occurs
-- Creation of custom errors. Easy-to-understand handling of where errors occurred
+- A mechanism to fall back to the original logit when filtering using ConstraintFilter crashes (when catching an `except` or when no permission token is present)  
+- A design that prevents the entire system from crashing even if an error occurs.  
+- Creation of custom errors. Easy-to-understand operation showing where the error occurred (engine, llm_client, tokenizer).  
 
 ### 4-2. Performance Optimization (Caching, Batch Processing)
-
-- Caching and resumption during current text analysis
-- Caching using Trie trees
-- Batch processing
+- Caching and resumption during current text analysis.  
+- Caching using Trie trees.  
+- Regarding batch processing, it does not work well with FSMs. Additionally, since the PCs in the school building environment cannot use GPUs and are already utilizing the CPU to its full capacity, we decided to skip this for now.  
 
 ### 4-3. Comprehensive Test Suite
 
@@ -170,7 +171,9 @@ to execute the specified file.
 - Implement an autoregressive loop in src/engine.py to demonstrate how these components work together as a pipeline.
 - Within ConstraintsFilter, decode a specific schema when using a forced queue.
 
-## 🌈5-1. Resources
+## 🌈5. Resources
+
+### 5-1. URL
 
 - [組み込み例外](https://docs.python.org/ja/3.14/library/exceptions.html)
 - [Pythonのraiseについて](https://zenn.dev/tektek/articles/9b8fd47e2cac4f)

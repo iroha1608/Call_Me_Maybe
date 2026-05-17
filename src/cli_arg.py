@@ -12,7 +12,7 @@ class CLIConfig(BaseModel):
     """
         Configuration model for CLI arguments.
     """
-    function_definition: Path = Field(
+    functions_definition: Path = Field(
         default=Path("data/input/functions_definition.json"),
         description="Path to the function definitions JSON file."
     )
@@ -48,11 +48,11 @@ def parse_arguments() -> CLIConfig:
         Returns:
             CLIConfig: The validated configuration object
                             containing the parsed arguments.
-            Raises:
-                ValueError:
-                    If any of the provided paths do not have a .json extension.
-                ValidationError: If the provided arguments
-                                do not conform to the CLIConfig model.
+        Raises:
+            ValueError:
+                If any of the provided paths do not have a .json extension.
+            ValidationError: If the provided arguments
+                            do not conform to the CLIConfig model.
         """
     parser = argparse.ArgumentParser(
         description="Introduction to function calling in LLMs"
@@ -79,7 +79,6 @@ def parse_arguments() -> CLIConfig:
         # 解析、不正な引数は自動でSystemExitが呼ばれhelpが出る
         args = parser.parse_args()
 
-        # argparseでNoneになったものを除外して辞書化
         kwargs = {k: v for k, v in vars(args).items() if v is not None}
 
         # 型検証、安全なデータモデルの生成

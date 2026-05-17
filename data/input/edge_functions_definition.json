@@ -1,0 +1,47 @@
+[
+  {
+    "name": "fn_complex_profile_update",
+    "description": "Update a user profile with multiple data types.",
+    "parameters": {
+      "username": {
+        "type": "string"
+      },
+      "age": {
+        "type": "number"
+      },
+      "is_premium": {
+        "type": "boolean"
+      },
+      "delete_reason": {
+        "type": "null"
+      }
+    },
+    "returns": {
+      "type": "boolean"
+    }
+  },
+  {
+    "name": "fn_process_extreme_text",
+    "description": "Process any given text, including special characters or empty strings.",
+    "parameters": {
+      "input_text": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "fn_calculate_astronomical_number",
+    "description": "Perform calculations on extremely large numbers.",
+    "parameters": {
+      "huge_value": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "number"
+    }
+  }
+]
